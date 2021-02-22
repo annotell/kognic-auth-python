@@ -78,7 +78,9 @@ class AuthSession:
 
 
 class FaultTolerantAuthRequestSession:
-    """An object that can be used like a Request session that handles token refresh"""
+    """An object that can be used like a requests.Session that handles token refresh.
+    It is not a drop in replacement for requests.Session since this does not forward all methods.
+    We just expose the subset we need"""
     def __init__(self, auth=None, host=DEFAULT_HOST):
         self.auth = auth
         self.host = host
@@ -87,6 +89,10 @@ class FaultTolerantAuthRequestSession:
     @property
     def request_session(self) -> requests.Session:
         return self._oauth_session.session
+
+    @property
+    def headers(self):
+        return self.request_session.headers
 
     def get(self, *args, **kwargs) -> requests.Response:
         return self._query(self.request_session.get, *args, **kwargs)
