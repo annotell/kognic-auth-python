@@ -5,6 +5,7 @@ import requests
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.common.errors import AuthlibBaseError
 from .credentials_parser import resolve_credentials
+import threading
 
 DEFAULT_HOST = "https://user.annotell.com"
 
@@ -43,6 +44,7 @@ class AuthSession:
 
         self._token = None
         self._expires_at = None
+        self._lock = threading.RLock()
 
     def _log_new_token(self):
         log.info(f"Got new token, with ttl={self._token['expires_in']} and expires {self._expires_at} UTC")
@@ -58,8 +60,9 @@ class AuthSession:
 
     def fetch_token(self):
         log.debug("Fetching token")
-        self._token = self.oauth_session.fetch_access_token(url=self.token_url)
-        self._expires_at = datetime.utcfromtimestamp(self._token['expires_at'])
+        with self._lock:
+            self._token = self.oauth_session.fetch_access_token(url=self.token_url)
+            self._expires_at = datetime.utcfromtimestamp(self._token['expires_at'])
         self._log_new_token()
 
     @property
@@ -72,8 +75,9 @@ class AuthSession:
 
     @property
     def session(self):
-        if not self._token:
-            self.init()
+        with self._lock:
+            if not self._token:
+                self.init()
         return self.oauth_session.session
 
 
@@ -85,6 +89,7 @@ class FaultTolerantAuthRequestSession:
         self.auth = auth
         self.host = host
         self._oauth_session = AuthSession(auth=auth, host=host)
+        self._lock = threading.Lock()
 
     @property
     def request_session(self) -> requests.Session:
@@ -117,7 +122,8 @@ class FaultTolerantAuthRequestSession:
         except AuthlibBaseError as e:
             if e.error == "invalid_token":
                 log.warning("Got invalid token, resetting auth session")
-                self._oauth_session = AuthSession(auth=self.auth, host=self.host)
+                with self._lock:
+                    self._oauth_session = AuthSession(auth=self.auth, host=self.host)
                 resp = fun(*args, **kwargs)
             else:
                 raise
