@@ -11,11 +11,13 @@ DEFAULT_HOST = "https://user.annotell.com"
 
 log = logging.getLogger(__name__)
 
+
 # https://docs.authlib.org/en/latest/client/oauth2.html
 class AuthSession:
     """
     Not thread safe
     """
+
     def __init__(self, *,
                  auth=None,
                  client_id: Optional[str] = None,
@@ -85,6 +87,7 @@ class FaultTolerantAuthRequestSession:
     """An object that can be used like a requests.Session that handles token refresh.
     It is not a drop in replacement for requests.Session since this does not forward all methods.
     We just expose the subset we need"""
+
     def __init__(self, auth=None, host=DEFAULT_HOST):
         self.auth = auth
         self.host = host
@@ -100,32 +103,35 @@ class FaultTolerantAuthRequestSession:
         return self.request_session.headers
 
     def get(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.get, *args, **kwargs)
+        return self._query('get', *args, **kwargs)
 
     def post(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.post, *args, **kwargs)
+        return self._query('post', *args, **kwargs)
 
     def put(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.put, *args, **kwargs)
+        return self._query('put', *args, **kwargs)
 
     def patch(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.patch, *args, **kwargs)
+        return self._query('patch', *args, **kwargs)
 
     def delete(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.delete, *args, **kwargs)
+        return self._query('delete', *args, **kwargs)
 
-    def _query(self, fun, *args, **kwargs):
+    def _query(self, fun_name, *args, **kwargs):
         # add retry if the token has expired, this can happen when the session
         # is left open for many hours without any queries
+
+        # need to resolve this on the fly since the request session will change on reset
+        def fun():
+            return getattr(self.request_session, fun_name)(*args, **kwargs)
+
         try:
-            resp = fun(*args, **kwargs)
+            return fun()
         except AuthlibBaseError as e:
             if e.error == "invalid_token":
                 log.warning("Got invalid token, resetting auth session")
                 with self._lock:
                     self._oauth_session = AuthSession(auth=self.auth, host=self.host)
-                resp = fun(*args, **kwargs)
+                return fun()
             else:
                 raise
-        return resp
-
