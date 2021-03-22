@@ -19,9 +19,12 @@ API clients such as the `InputApiClient` accept this `auth` parameter.
 Under the hood, they all use the AuthSession class which is implements a `requests` session with automatic token
  refresh.    
 ```python
-from annotell.auth.authsession import FaultTolerantAuthRequestSession
+from annotell.auth.authsession import AuthSession
 
-sess = FaultTolerantAuthRequestSession()
+auth_session = AuthSession()
+
+# create a requests session with automatic oauth refresh  
+sess = auth_session.session
 
 # make call to some Annotell service with your token. Use default requests 
 sess.get("https://api.annotell.com")
@@ -29,14 +32,10 @@ sess.get("https://api.annotell.com")
 
 ## Changelog
 
-### 1.6 (2021-02-21)
-- Expose underlying `requests.Session` on `FaultTolerantAuthRequestSession`
-- Fix some thread locks
+### 1.5
+Add FaultTolerantAuthRequestSession that handles token refresh on long running sessions. 
 
-### 1.5 (2020-10-20)
-- Add `FaultTolerantAuthRequestSession` that handles token refresh on long running sessions. 
-
-### 1.4 (2020-04-16)
+### 1.4
 - Add support for `auth` parameter, with path to credentials file or `AnnotellCredentials` object
 - Drop support for legacy API token
 
