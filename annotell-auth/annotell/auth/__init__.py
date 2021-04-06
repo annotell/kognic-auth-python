@@ -3,5 +3,5 @@ from logging import NullHandler
 
 logging.getLogger(__name__).addHandler(NullHandler())
 
-__version__ = "1.5.0"
+__version__ = "1.6.1"
 

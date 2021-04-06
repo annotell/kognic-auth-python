@@ -5,16 +5,19 @@ import requests
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.common.errors import AuthlibBaseError
 from .credentials_parser import resolve_credentials
+import threading
 
 DEFAULT_HOST = "https://user.annotell.com"
 
 log = logging.getLogger(__name__)
+
 
 # https://docs.authlib.org/en/latest/client/oauth2.html
 class AuthSession:
     """
     Not thread safe
     """
+
     def __init__(self, *,
                  auth=None,
                  client_id: Optional[str] = None,
@@ -43,6 +46,7 @@ class AuthSession:
 
         self._token = None
         self._expires_at = None
+        self._lock = threading.RLock()
 
     def _log_new_token(self):
         log.info(f"Got new token, with ttl={self._token['expires_in']} and expires {self._expires_at} UTC")
@@ -58,8 +62,9 @@ class AuthSession:
 
     def fetch_token(self):
         log.debug("Fetching token")
-        self._token = self.oauth_session.fetch_access_token(url=self.token_url)
-        self._expires_at = datetime.utcfromtimestamp(self._token['expires_at'])
+        with self._lock:
+            self._token = self.oauth_session.fetch_access_token(url=self.token_url)
+            self._expires_at = datetime.utcfromtimestamp(self._token['expires_at'])
         self._log_new_token()
 
     @property
@@ -72,48 +77,61 @@ class AuthSession:
 
     @property
     def session(self):
-        if not self._token:
-            self.init()
+        with self._lock:
+            if not self._token:
+                self.init()
         return self.oauth_session.session
 
 
 class FaultTolerantAuthRequestSession:
-    """An object that can be used like a Request session that handles token refresh"""
+    """An object that can be used like a requests.Session that handles token refresh.
+    It is not a drop in replacement for requests.Session since this does not forward all methods.
+    We just expose the subset we need"""
+
     def __init__(self, auth=None, host=DEFAULT_HOST):
         self.auth = auth
         self.host = host
         self._oauth_session = AuthSession(auth=auth, host=host)
+        self._lock = threading.Lock()
 
     @property
     def request_session(self) -> requests.Session:
         return self._oauth_session.session
 
+    @property
+    def headers(self):
+        return self.request_session.headers
+
     def get(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.get, *args, **kwargs)
+        return self._query('get', *args, **kwargs)
 
     def post(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.post, *args, **kwargs)
+        return self._query('post', *args, **kwargs)
 
     def put(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.put, *args, **kwargs)
+        return self._query('put', *args, **kwargs)
 
     def patch(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.patch, *args, **kwargs)
+        return self._query('patch', *args, **kwargs)
 
     def delete(self, *args, **kwargs) -> requests.Response:
-        return self._query(self.request_session.delete, *args, **kwargs)
+        return self._query('delete', *args, **kwargs)
 
-    def _query(self, fun, *args, **kwargs):
+    def _query(self, fun_name, *args, **kwargs):
         # add retry if the token has expired, this can happen when the session
         # is left open for many hours without any queries
+
+        # need to resolve this on the fly since the request session will change on reset
+        def fun():
+            return getattr(self.request_session, fun_name)(*args, **kwargs)
+
         try:
-            resp = fun(*args, **kwargs)
+            return fun()
         except AuthlibBaseError as e:
             if e.error == "invalid_token":
                 log.warning("Got invalid token, resetting auth session")
-                self._oauth_session = AuthSession(auth=self.auth, host=self.host)
-                resp = fun(*args, **kwargs)
+                with self._lock:
+                    self._oauth_session = AuthSession(auth=self.auth, host=self.host)
+                return fun()
             else:
                 raise
-        return resp
-
