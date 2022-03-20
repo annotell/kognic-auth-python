@@ -4,7 +4,7 @@ Python 3 library providing foundations for Annotell Authentication
 on top of the `requests` library. 
 
 Builds on the standard Oauth 2.0 Client Credentials flow. There are a few ways to provide auth credentials to our api
- clients. Annotell Python clients such as in `annotell-ams`, or `annotell-input-api` accept an `auth` parameter that
+ clients. Annotell Python clients such as in `annotell-input-api` accept an `auth` parameter that
   can be set explicitly or you can omit it and use environment variables. 
 
 There are a few ways to set your credentials in `auth`. 
