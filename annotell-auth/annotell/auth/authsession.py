@@ -6,8 +6,7 @@ from authlib.integrations.requests_client import OAuth2Session
 from authlib.common.errors import AuthlibBaseError
 from .credentials_parser import resolve_credentials
 import threading
-
-DEFAULT_HOST = "https://user.annotell.com"
+from annotell.auth import DEFAULT_HOST
 
 log = logging.getLogger(__name__)
 
@@ -56,8 +55,6 @@ class AuthSession:
         self._log_new_token()
 
     def init(self):
-        # maybe support loading from file?
-        # for now, just fetch a new token
         self.fetch_token()
 
     def fetch_token(self):
