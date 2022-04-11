@@ -30,7 +30,7 @@ sess.get("https://api.annotell.com")
 ## Changelog
 
 ### 1.7.0 (2022-04-11)
-- Fix compatability issue with authlib >= 1.0.0. Resetting the auth session failed, when the refresh token had expired.   
+- Fix compatibility issue with authlib >= 1.0.0. Resetting the auth session failed, when the refresh token had expired.   
 
 ### 1.6.0 (2021-02-21)
 - Expose underlying `requests.Session` on `FaultTolerantAuthRequestSession`
