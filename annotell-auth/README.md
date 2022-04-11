@@ -29,14 +29,17 @@ sess.get("https://api.annotell.com")
 
 ## Changelog
 
-### 1.6 (2021-02-21)
+### 1.7.0 (2022-04-11)
+- Fix compatability issue with authlib >= 1.0.0. Resetting the auth session failed, when the refresh token had expired.   
+
+### 1.6.0 (2021-02-21)
 - Expose underlying `requests.Session` on `FaultTolerantAuthRequestSession`
 - Fix some thread locks
 
-### 1.5 (2020-10-20)
+### 1.5.0 (2020-10-20)
 - Add `FaultTolerantAuthRequestSession` that handles token refresh on long running sessions. 
 
-### 1.4 (2020-04-16)
+### 1.4.0 (2020-04-16)
 - Add support for `auth` parameter, with path to credentials file or `AnnotellCredentials` object
 - Drop support for legacy API token
 

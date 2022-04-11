@@ -125,13 +125,20 @@ class FaultTolerantAuthRequestSession:
         def fun():
             return getattr(self.request_session, fun_name)(*args, **kwargs)
 
+        def reset_and_retry():
+            log.warning("Got invalid token, resetting auth session")
+            with self._lock:
+                self._oauth_session = AuthSession(auth=self.auth, host=self.host)
+            return fun()
+
         try:
             return fun()
         except AuthlibBaseError as e:
             if e.error == "invalid_token":
-                log.warning("Got invalid token, resetting auth session")
-                with self._lock:
-                    self._oauth_session = AuthSession(auth=self.auth, host=self.host)
-                return fun()
-            else:
-                raise
+                return reset_and_retry()
+            raise
+        except requests.exceptions.HTTPError as e:
+            # with authlib >= 1.0.0
+            if e.response.status_code == 401 and "invalid_token" == e.response.json().get("error"):
+                return reset_and_retry()
+            raise

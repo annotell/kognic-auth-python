@@ -39,7 +39,7 @@ setup(
     keywords=['API', 'Annotell'],
     install_requires=[
         'requests>=2.20,<3',
-        'authlib>=0.14.1,<1'
+        'authlib>=0.14.1,<1.1'
     ],
     python_requires='~=3.6',
     include_package_data=True,
