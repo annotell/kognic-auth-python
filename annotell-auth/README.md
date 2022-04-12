@@ -29,6 +29,11 @@ sess.get("https://api.annotell.com")
 
 ## Changelog
 
+### 1.8.0 (2022-04-12)
+- Initial support for httpx (BETA). Solves refresh token expiry by reset without the `FaultTolerantAuthRequestSession`  
+- The library will be refactored by a breaking 2.0 release, and make the same changes to the requests version. 
+The `authsession` module backed by `requests` is untouched for now.   
+
 ### 1.7.0 (2022-04-11)
 - Fix compatibility issue with authlib >= 1.0.0. Resetting the auth session failed, when the refresh token had expired.   
 

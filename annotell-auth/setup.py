@@ -41,6 +41,15 @@ setup(
         'requests>=2.20,<3',
         'authlib>=0.14.1,<1.1'
     ],
+    extras_require={
+        'httpx': [
+            "httpx>=0.20,<1"
+        ],
+        'full': [
+            'requests>=2.20,<3',
+            "httpx>=0.20,<1"
+        ]
+    },
     python_requires='~=3.6',
     include_package_data=True,
     package_data={
