@@ -38,16 +38,18 @@ setup(
     download_url='%s/tarball/%s' % (URL, version),
     keywords=['API', 'Annotell'],
     install_requires=[
-        'requests>=2.20,<3',
         'authlib>=0.14.1,<1.1'
     ],
     extras_require={
+        'requests': [
+            'requests>=2.20,<3',
+        ],
         'httpx': [
-            "httpx>=0.20,<1"
+            'httpx>=0.20,<1'
         ],
         'full': [
             'requests>=2.20,<3',
-            "httpx>=0.20,<1"
+            'httpx>=0.20,<1'
         ]
     },
     python_requires='~=3.6',

@@ -52,8 +52,6 @@ class HttpxAuthAsyncClient(AuthClient):
             grant_type="client_credentials"
         )
 
-        self._expires_at = None
-        self._refresh_expires_at = None
         self._lock = Lock()
 
     @property
@@ -61,9 +59,9 @@ class HttpxAuthAsyncClient(AuthClient):
         return self._oauth_client.token
 
     async def _update_token(self, token: OAuth2Token, refresh_token=None, access_token=None):
-        self._oauth_client.token = token
         self._log_new_token()
 
+    @property
     async def session(self) -> AsyncOAuth2Client:
         if not self.token:
             async with self._lock:
