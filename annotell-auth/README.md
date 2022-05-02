@@ -1,9 +1,11 @@
 # Annotell Authentication
 
 Python 3 library providing foundations for Annotell Authentication
-on top of the `requests` library. 
+on top of the `requests` or `httpx` libraries. 
 
-Builds on the standard Oauth 2.0 Client Credentials flow. There are a few ways to provide auth credentials to our api
+Install with `pip install annotell-auth[requests]` or `pip install annotell-auth[httpx]` 
+
+Builds on the standard OAuth 2.0 Client Credentials flow. There are a few ways to provide auth credentials to our api
  clients. Annotell Python clients such as in `annotell-input-api` accept an `auth` parameter that
   can be set explicitly or you can omit it and use environment variables. 
 
@@ -16,18 +18,21 @@ The credentials will contain the Client Id and Client Secret.
 
 API clients such as the `InputApiClient` accept this `auth` parameter.
 
-Under the hood, they all use the AuthSession class which is implements a `requests` session with automatic token
- refresh.    
+Under the hood, they commonly use the AuthSession class which is implements a `requests` session with automatic token
+ refresh. An `httpx` implementation is also available. 
 ```python
-from annotell.auth.authsession import FaultTolerantAuthRequestSession
+from annotell.auth.requests.auth_session import RequestsAuthSession
 
-sess = FaultTolerantAuthRequestSession()
+sess = RequestsAuthSession()
 
 # make call to some Annotell service with your token. Use default requests 
 sess.get("https://api.annotell.com")
 ```
 
 ## Changelog
+
+### 2.0.0 (2022-05-02)
+Refactor for backend separation, with optional dependencies for either `httpx` or `requests`. 
 
 ### 1.8.0 (2022-04-12)
 - Initial support for httpx (BETA). Solves refresh token expiry by reset without the `FaultTolerantAuthRequestSession`  
