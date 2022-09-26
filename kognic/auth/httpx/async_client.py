@@ -33,7 +33,7 @@ class HttpxAuthAsyncClient(AuthClient):
                  host: str = DEFAULT_HOST):
         """
         There is a variety of ways to setup the authentication. See
-        https://github.com/annotell/annotell-python/tree/master/annotell-auth
+        https://github.com/annotell/annotell-python/tree/master/kognic-auth
         :param auth: authentication credentials
         :param client_id: client id for authentication
         :param client_secret: client secret for authentication
