@@ -3,14 +3,14 @@ import re
 
 URL = 'https://github.com/annotell/annotell-python'
 
-package_name = 'annotell-auth'
+package_name = 'kognic-auth'
 
 with open('README.md') as f:
     LONG_DESCRIPTION = f.read()
 
 # resolve version by opening file. We cannot do import during install
 # since the package does not yet exist
-with open('annotell/auth/__init__.py', 'r') as fd:
+with open('kognic/auth/__init__.py', 'r') as fd:
     match = re.search(r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]',
                       fd.read(), re.MULTILINE)
     version = match.group(1) if match else None
@@ -19,24 +19,24 @@ if not version:
     raise RuntimeError('Cannot find version information')
 
 # https://packaging.python.org/guides/packaging-namespace-packages/
-packages = find_namespace_packages(include=['annotell.*'])
+packages = find_namespace_packages(include=['kognic.*'])
 
 release_status = "Development Status :: 5 - Production/Stable"
 
 setup(
     name=package_name,
     packages=packages,
-    namespace_packages=["annotell"],
+    namespace_packages=["kognic"],
     version=version,
-    description='Annotell Authentication',
+    description='Kognic Authentication',
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
-    author='Annotell',
-    author_email='Michel Edkrantz <michel.edkrantz@annotell.com>',
+    author='Kognic',
+    author_email='Michel Edkrantz <michel.edkrantz@kognic.com>',
     license='MIT',
     url=URL,
     download_url='%s/tarball/%s' % (URL, version),
-    keywords=['API', 'Annotell'],
+    keywords=['API', 'Kognic'],
     install_requires=[
         'authlib>=0.14.1,<1.1'
     ],

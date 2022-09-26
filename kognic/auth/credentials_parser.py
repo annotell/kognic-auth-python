@@ -6,7 +6,7 @@ from typing import Optional
 REQUIRED_CREDENTIALS_FILE_KEYS = ["clientId", "clientSecret", "email", "userId", "issuer"]
 
 @dataclass
-class AnnotellCredentials:
+class ApiCredentials:
     client_id: str
     client_secret: str
     email: str
@@ -19,7 +19,7 @@ def parse_credentials(path: str):
         with open(path) as f:
             credentials = json.load(f)
     except FileNotFoundError:
-        raise FileNotFoundError(f"Could not find Annotell Credentials file at {path}")
+        raise FileNotFoundError(f"Could not find Api Credentials file at {path}")
 
     if not isinstance(credentials, dict):
         raise AttributeError(f"Could not json dict from {path}")
@@ -28,7 +28,7 @@ def parse_credentials(path: str):
         if k not in credentials:
             raise KeyError(f"Missing key {k} in credentials file")
 
-    return AnnotellCredentials(
+    return ApiCredentials(
         client_id=credentials.get("clientId"),
         client_secret=credentials.get("clientSecret"),
         email=credentials.get("email"),
@@ -42,13 +42,25 @@ def get_credentials(auth):
         if auth.endswith(".json"):
             return parse_credentials(auth)
         raise ValueError("Bad auth credentials file, must be json")
-    elif isinstance(auth, AnnotellCredentials):
+    elif isinstance(auth, ApiCredentials):
         return auth
     else:
-        raise ValueError("Bad auth credentials, must be path to credentials file, or AnnotellCredentials object")
+        raise ValueError("Bad auth credentials, must be path to credentials file, or ApiCredentials object")
 
 
 def get_credentials_from_env():
+    creds = os.getenv("KOGNIC_CREDENTIALS")
+    if creds:
+        client_credentials = parse_credentials(creds)
+        return client_credentials.client_id, client_credentials.client_secret
+
+    client_id = os.getenv("KOGNIC_CLIENT_ID")
+    client_secret = os.getenv("KOGNIC_CLIENT_SECRET")
+
+    if client_id and client_secret:
+        return client_id, client_secret
+
+    # fallbacks
     creds = os.getenv("ANNOTELL_CREDENTIALS")
     if creds:
         client_credentials = parse_credentials(creds)
@@ -58,6 +70,7 @@ def get_credentials_from_env():
     client_secret = os.getenv("ANNOTELL_CLIENT_SECRET")
 
     return client_id, client_secret
+
 
 def resolve_credentials(auth=None,
                         client_id: Optional[str] = None,

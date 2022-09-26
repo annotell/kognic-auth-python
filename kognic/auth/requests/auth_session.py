@@ -5,9 +5,9 @@ import threading
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.common.errors import AuthlibBaseError
 
-from annotell.auth.base.auth_client import AuthClient
-from annotell.auth.credentials_parser import resolve_credentials
-from annotell.auth import DEFAULT_HOST
+from kognic.auth.base.auth_client import AuthClient
+from kognic.auth.credentials_parser import resolve_credentials
+from kognic.auth import DEFAULT_HOST
 
 log = logging.getLogger(__name__)
 

@@ -3,6 +3,6 @@ from logging import NullHandler
 
 logging.getLogger(__name__).addHandler(NullHandler())
 
-__version__ = "2.0.1"
+__version__ = "3.0.0"
 
-DEFAULT_HOST = "https://user.annotell.com"
+DEFAULT_HOST = "https://auth.app.kognic.com"
