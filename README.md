@@ -31,6 +31,9 @@ sess.get("https://api.app.kognic.com")
 
 ## Changelog
 
+### 3.0.1 (2022-12-06)
+- Support read credentials from dict
+
 ### 3.0.0 (2022-09-26)
 - Rebranded from Annotell to Kognic. 
 - Dropped deprecated `FaultTolerantAuthRequestSession`
