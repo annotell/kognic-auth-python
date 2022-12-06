@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 REQUIRED_CREDENTIALS_FILE_KEYS = ["clientId", "clientSecret", "email", "userId", "issuer"]
 
@@ -14,12 +14,15 @@ class ApiCredentials:
     issuer: str
 
 
-def parse_credentials(path: str):
-    try:
-        with open(path) as f:
-            credentials = json.load(f)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Could not find Api Credentials file at {path}")
+def parse_credentials(path: Union[str, dict]):
+    if isinstance(path, dict):
+        credentials = path
+    else:
+        try:
+            with open(path) as f:
+                credentials = json.load(f)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Could not find Api Credentials file at {path}")
 
     if not isinstance(credentials, dict):
         raise AttributeError(f"Could not json dict from {path}")
