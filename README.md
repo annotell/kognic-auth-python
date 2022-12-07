@@ -31,7 +31,7 @@ sess.get("https://api.app.kognic.com")
 
 ## Changelog
 
-### 3.0.1 (2022-12-06)
+### 3.0.2 (2022-12-07)
 - Support read credentials from dict
 
 ### 3.0.0 (2022-09-26)
