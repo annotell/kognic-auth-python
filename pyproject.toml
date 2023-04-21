@@ -18,14 +18,15 @@ dependencies = [
 requires-python=">=3.6"
 readme = "README.md"
 keywords = ["Kognic", "API"]
-url = "https://github.com/annotell/kognic-auth-python"
-licence = "MIT"
+license = {text = "MIT"}
 classifiers = [
         "Development Status :: 5 - Production/Stable",
         "License :: OSI Approved :: MIT License",
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
 ]
+[project.urls]
+homepage = "https://github.com/annotell/kognic-auth-python"
 
 [project.optional-dependencies]
 httpx = [
