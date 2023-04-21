@@ -1,0 +1,43 @@
+[build-system]
+requires = [
+    "setuptools",
+]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "kognic-auth"
+version = "3.1.0"
+authors = [
+    { name = "Kognic", email = "michel.edkrantz@kognic.com" },
+]
+description = "Kognic Authentication"
+dependencies = [
+    "authlib>=0.14.1,<1.1"
+]
+requires-python=">=3.6"
+long_description = file: README.md
+long_description_content_type = text/markdown
+keywords = 
+        Kognic
+        API
+url = https://github.com/annotell/kognic-auth-python
+licence = MIT
+classifiers = 
+        Development Status :: 5 - Production/Stable
+        License :: OSI Approved :: MIT License'
+        Intended Audience :: Developers'
+        Programming Language :: Python :: 3'
+
+
+[project.optional-dependencies]
+httpx = [
+    "httpx>=0.20,<1"
+]
+requests = [
+    "requests>=2.20,<3"
+]
+full = [
+    "httpx>=0.20,<1"
+    "requests>=2.20,<3"
+]
