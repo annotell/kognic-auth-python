@@ -3,7 +3,14 @@ import os
 from dataclasses import dataclass
 from typing import Optional, Union
 
-REQUIRED_CREDENTIALS_FILE_KEYS = ["clientId", "clientSecret", "email", "userId", "issuer"]
+REQUIRED_CREDENTIALS_FILE_KEYS = [
+    "clientId",
+    "clientSecret",
+    "email",
+    "userId",
+    "issuer",
+]
+
 
 @dataclass
 class ApiCredentials:
@@ -36,7 +43,7 @@ def parse_credentials(path: Union[str, dict]):
         client_secret=credentials.get("clientSecret"),
         email=credentials.get("email"),
         user_id=credentials.get("userId"),
-        issuer=credentials.get("issuer")
+        issuer=credentials.get("issuer"),
     )
 
 
@@ -48,7 +55,9 @@ def get_credentials(auth):
     elif isinstance(auth, ApiCredentials):
         return auth
     else:
-        raise ValueError("Bad auth credentials, must be path to credentials file, or ApiCredentials object")
+        raise ValueError(
+            "Bad auth credentials, must be path to credentials file, or ApiCredentials object"
+        )
 
 
 def get_credentials_from_env():
@@ -75,16 +84,18 @@ def get_credentials_from_env():
     return client_id, client_secret
 
 
-def resolve_credentials(auth=None,
-                        client_id: Optional[str] = None,
-                        client_secret: Optional[str] = None):
+def resolve_credentials(
+    auth=None, client_id: Optional[str] = None, client_secret: Optional[str] = None
+):
     has_credentials_tuple = client_id is not None and client_secret is not None
     if auth is not None:
         if has_credentials_tuple:
             raise ValueError("Choose either auth or client_id+client_secret")
         if isinstance(auth, tuple):
             if len(auth) != 2:
-                raise ValueError("Credentials tuple must be tuple of (client_id, client_secret)")
+                raise ValueError(
+                    "Credentials tuple must be tuple of (client_id, client_secret)"
+                )
             client_id, client_secret = auth
         else:
             creds = get_credentials(auth)
@@ -95,6 +106,7 @@ def resolve_credentials(auth=None,
 
     return client_id, client_secret
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     credentials = get_credentials_from_env()
     print(credentials)
