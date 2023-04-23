@@ -12,5 +12,5 @@ class CredentialsParserTest(unittest.TestCase):
             "issuer": "auth.kognic.test",
         }
         creds = credentials_parser.parse_credentials(p)
-        self.assertEquals(creds.client_id, "CLIENT_ID")
-        self.assertEquals(creds.client_secret, "SECRET")
+        self.assertEqual(creds.client_id, "CLIENT_ID")
+        self.assertEqual(creds.client_secret, "SECRET")
