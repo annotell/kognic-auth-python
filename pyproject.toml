@@ -1,13 +1,14 @@
 [build-system]
 requires = [
-    "setuptools"
+  "setuptools>45", 
+  "setuptools_scm[toml]>=6.2"
 ]
 build-backend = "setuptools.build_meta"
 
 
 [project]
 name = "kognic-auth"
-version = "3.1.0"
+dynamic = ["version"]
 authors = [
     { name = "Kognic", email = "michel.edkrantz@kognic.com" },
 ]
@@ -27,6 +28,9 @@ classifiers = [
 ]
 [project.urls]
 homepage = "https://github.com/annotell/kognic-auth-python"
+
+[tool.setuptools_scm]
+write_to = "src/kognic/auth/_version.py"
 
 [project.optional-dependencies]
 httpx = [
