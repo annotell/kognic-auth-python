@@ -5,7 +5,6 @@ from typing import Optional
 import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2.rfc6749 import OAuth2Token
-
 from kognic.auth import DEFAULT_HOST
 from kognic.auth.base.auth_client import AuthClient
 from kognic.auth.credentials_parser import resolve_credentials
@@ -14,7 +13,6 @@ log = logging.getLogger(__name__)
 
 
 class _AsyncFixedClient(AsyncOAuth2Client):
-
     async def _refresh_token(self, url, **kwargs):
         try:
             return await super(_AsyncFixedClient, self)._refresh_token(url, **kwargs)
@@ -26,11 +24,14 @@ class _AsyncFixedClient(AsyncOAuth2Client):
 
 
 class HttpxAuthAsyncClient(AuthClient):
-    def __init__(self, *,
-                 auth=None,
-                 client_id: Optional[str] = None,
-                 client_secret: Optional[str] = None,
-                 host: str = DEFAULT_HOST):
+    def __init__(
+        self,
+        *,
+        auth=None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        host: str = DEFAULT_HOST,
+    ):
         """
         There is a variety of ways to setup the authentication. See
         https://github.com/annotell/annotell-python/tree/master/kognic-auth
@@ -49,7 +50,7 @@ class HttpxAuthAsyncClient(AuthClient):
             client_secret=client_secret,
             update_token=self._update_token,
             token_endpoint=self.token_url,
-            grant_type="client_credentials"
+            grant_type="client_credentials",
         )
 
         self._lock = Lock()
@@ -68,4 +69,3 @@ class HttpxAuthAsyncClient(AuthClient):
                 token = await self._oauth_client.fetch_token()
                 await self._update_token(token)
         return self._oauth_client
-
