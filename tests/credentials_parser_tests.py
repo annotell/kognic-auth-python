@@ -1,4 +1,5 @@
 import unittest
+
 from kognic.auth import credentials_parser
 
 
