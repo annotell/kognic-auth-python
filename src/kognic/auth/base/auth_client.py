@@ -1,7 +1,7 @@
 import base64
 import json
-from datetime import datetime
 import logging
+from datetime import datetime
 from typing import Optional
 
 log = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ class AuthClient:
 
     @property
     def access_token(self):
-        return self.token['access_token'] if self.token else None
+        return self.token["access_token"] if self.token else None
 
     @property
     def claims(self) -> Optional[dict]:
@@ -22,11 +22,11 @@ class AuthClient:
         :return:
         """
         if self.token:
-            return json.loads(base64.b64decode(self.access_token.split(".")[1] + '=='))
+            return json.loads(base64.b64decode(self.access_token.split(".")[1] + "=="))
 
     @property
     def expires_at(self):
-        return datetime.utcfromtimestamp(self.token['expires_at']) if self.token else None
+        return datetime.utcfromtimestamp(self.token["expires_at"]) if self.token else None
 
     @property
     def token(self):

@@ -1,19 +1,18 @@
 import logging
-from typing import Optional
-import requests
 import threading
-from authlib.integrations.requests_client import OAuth2Session
-from authlib.common.errors import AuthlibBaseError
+from typing import Optional
 
+import requests
+from authlib.common.errors import AuthlibBaseError
+from authlib.integrations.requests_client import OAuth2Session
+from kognic.auth import DEFAULT_HOST
 from kognic.auth.base.auth_client import AuthClient
 from kognic.auth.credentials_parser import resolve_credentials
-from kognic.auth import DEFAULT_HOST
 
 log = logging.getLogger(__name__)
 
 
 class _FixedSession(OAuth2Session):
-
     def refresh_token(self, url, **kwargs):
         try:
             super(_FixedSession, self).refresh_token(url, **kwargs)
@@ -36,11 +35,14 @@ class RequestsAuthSession(AuthClient):
     Not thread safe
     """
 
-    def __init__(self, *,
-                 auth=None,
-                 client_id: Optional[str] = None,
-                 client_secret: Optional[str] = None,
-                 host: str = DEFAULT_HOST):
+    def __init__(
+        self,
+        *,
+        auth=None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        host: str = DEFAULT_HOST,
+    ):
         """
         There is a variety of ways to setup the authentication. See
         https://github.com/annotell/annotell-python/tree/master/kognic-auth
@@ -57,9 +59,9 @@ class RequestsAuthSession(AuthClient):
         self.oauth_session = _FixedSession(
             client_id=client_id,
             client_secret=client_secret,
-            token_endpoint_auth_method='client_secret_post',
+            token_endpoint_auth_method="client_secret_post",
             update_token=self._update_token,
-            token_endpoint=self.token_url
+            token_endpoint=self.token_url,
         )
 
         self._lock = threading.RLock()
@@ -78,4 +80,3 @@ class RequestsAuthSession(AuthClient):
                 token = self.oauth_session.fetch_access_token(url=self.token_url)
                 self._update_token(token)
         return self.oauth_session.session
-

@@ -43,3 +43,11 @@ full = [
     "httpx>=0.20,<1",
     "requests>=2.20,<3"
 ]
+
+[tool.ruff]
+line-length = 120
+select = ["E", "F", "B", "W", "I001"]
+target-version = "py38"
+
+[tool.black]
+line-length = 120
