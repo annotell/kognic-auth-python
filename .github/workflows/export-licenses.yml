@@ -1,0 +1,27 @@
+name: Export licenses
+
+on:
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+  push:
+
+jobs:
+  build_and_export_licences:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    steps:
+    - uses: actions/checkout@v4
+    - uses: annotell/gha-pybuild/build-setup@v2
+      with:
+        python-version: '3.10'
+        cache-key-version: 'audit'
+        skip-install: 'true'
+    - uses: annotell/gha-pybuild/build-licenses-export@v2
+  upload:
+    needs: build_and_export_licences
+    uses: annotell/gha-supply-chain/.github/workflows/reusable-license-uploader.yaml@v0.1.0
+    with:
+        language: python
