@@ -14,7 +14,7 @@ authors = [
 ]
 description = "Kognic Authentication"
 dependencies = [
-    "authlib>=0.14.1,<1.3"
+    "authlib>=0.14.1,<1.4"
 ]
 requires-python=">=3.6"
 readme = "README.md"
