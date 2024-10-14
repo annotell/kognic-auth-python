@@ -5,6 +5,7 @@ from typing import Optional
 import requests
 from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.requests_client import OAuth2Session
+
 from kognic.auth import DEFAULT_HOST
 from kognic.auth.base.auth_client import AuthClient
 from kognic.auth.credentials_parser import resolve_credentials
