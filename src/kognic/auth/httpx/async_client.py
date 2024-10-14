@@ -5,6 +5,7 @@ from typing import Optional
 import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2.rfc6749 import OAuth2Token
+
 from kognic.auth import DEFAULT_HOST
 from kognic.auth.base.auth_client import AuthClient
 from kognic.auth.credentials_parser import resolve_credentials
