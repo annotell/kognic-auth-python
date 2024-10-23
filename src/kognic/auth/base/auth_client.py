@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 log = logging.getLogger(__name__)
@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 class AuthClient:
     def _log_new_token(self):
-        log.info(f"Got new token, with ttl={self.token['expires_in']} and expires {self.expires_at} UTC")
+        log.info(f"Got new token, with ttl={self.token['expires_in']} and expires {self.expires_at}")
 
     @property
     def access_token(self):
@@ -26,7 +26,7 @@ class AuthClient:
 
     @property
     def expires_at(self):
-        return datetime.utcfromtimestamp(self.token["expires_at"]) if self.token else None
+        return datetime.fromtimestamp(self.token["expires_at"], tz=timezone.utc) if self.token else None
 
     @property
     def token(self):
