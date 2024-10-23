@@ -73,3 +73,6 @@ class HttpxAuthAsyncClient(AuthClient):
                     token = await self._oauth_client.fetch_token()
                     await self._update_token(token)
         return self._oauth_client
+
+    async def close(self):
+        await self._oauth_client.aclose()
