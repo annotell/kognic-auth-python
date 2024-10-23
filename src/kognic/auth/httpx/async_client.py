@@ -6,7 +6,7 @@ import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.oauth2.rfc6749 import OAuth2Token
 
-from kognic.auth import DEFAULT_HOST
+from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth.base.auth_client import AuthClient
 from kognic.auth.credentials_parser import resolve_credentials
 
@@ -32,17 +32,18 @@ class HttpxAuthAsyncClient(AuthClient):
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
+        token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     ):
         """
-        There is a variety of ways to setup the authentication. See
-        https://github.com/annotell/annotell-python/tree/master/kognic-auth
+        There is a variety of ways to set up the authentication.
         :param auth: authentication credentials
         :param client_id: client id for authentication
         :param client_secret: client secret for authentication
         :param host: base url for authentication server
+        :param token_endpoint: relative path to the token endpoint
         """
         self.host = host
-        self.token_url = "%s/v1/auth/oauth/token" % self.host
+        self.token_url = f"{host}{token_endpoint}"
 
         client_id, client_secret = resolve_credentials(auth, client_id, client_secret)
 
@@ -67,6 +68,8 @@ class HttpxAuthAsyncClient(AuthClient):
     async def session(self) -> AsyncOAuth2Client:
         if not self.token:
             async with self._lock:
-                token = await self._oauth_client.fetch_token()
-                await self._update_token(token)
+                # check again when coming out of the lock that the token is still not set
+                if not self.token:
+                    token = await self._oauth_client.fetch_token()
+                    await self._update_token(token)
         return self._oauth_client
