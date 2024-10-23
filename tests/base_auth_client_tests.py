@@ -12,6 +12,7 @@ class TestAuthClient(AuthClient):
     def token(self):
         return self._token
 
+
 class AuthClientTests(unittest.TestCase):
     def test_auth_client(self):
         expires_at = 1729670977

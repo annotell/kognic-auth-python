@@ -43,7 +43,7 @@ class RequestsAuthSession(AuthClient):
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
-        token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH
+        token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     ):
         """
         There is a variety of ways to set up the authentication.

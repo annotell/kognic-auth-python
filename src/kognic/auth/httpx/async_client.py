@@ -13,8 +13,6 @@ from kognic.auth.credentials_parser import resolve_credentials
 log = logging.getLogger(__name__)
 
 
-
-
 class _AsyncFixedClient(AsyncOAuth2Client):
     async def _refresh_token(self, url, **kwargs):
         try:
@@ -34,7 +32,7 @@ class HttpxAuthAsyncClient(AuthClient):
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
-        token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH
+        token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     ):
         """
         There is a variety of ways to set up the authentication.
