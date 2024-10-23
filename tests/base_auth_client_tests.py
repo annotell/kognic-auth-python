@@ -3,6 +3,7 @@ import unittest
 
 from kognic.auth.base.auth_client import AuthClient
 
+
 class TestAuthClient(AuthClient):
     def __init__(self, token: dict):
         self._token = token

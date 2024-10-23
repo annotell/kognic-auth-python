@@ -43,10 +43,10 @@ class RequestsAuthSession(AuthClient):
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
-        token_endpoint: str = TOKEN_ENDPOINT_RELPATH
+        token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH
     ):
         """
-        There is a variety of ways to setup the authentication. 
+        There is a variety of ways to set up the authentication.
         :param auth: authentication credentials
         :param client_id: client id for authentication
         :param client_secret: client secret for authentication
