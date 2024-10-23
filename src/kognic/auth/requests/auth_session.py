@@ -6,7 +6,7 @@ import requests
 from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.requests_client import OAuth2Session
 
-from kognic.auth import DEFAULT_HOST
+from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth.base.auth_client import AuthClient
 from kognic.auth.credentials_parser import resolve_credentials
 
@@ -43,6 +43,7 @@ class RequestsAuthSession(AuthClient):
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
+        token_endpoint: str = TOKEN_ENDPOINT_RELPATH
     ):
         """
         There is a variety of ways to setup the authentication. See
@@ -51,9 +52,10 @@ class RequestsAuthSession(AuthClient):
         :param client_id: client id for authentication
         :param client_secret: client secret for authentication
         :param host: base url for authentication server
+        :param token_endpoint: relative path to the token endpoint
         """
         self.host = host
-        self.token_url = "%s/v1/auth/oauth/token" % self.host
+        self.token_url = f"{host}{token_endpoint}"
 
         client_id, client_secret = resolve_credentials(auth, client_id, client_secret)
 
@@ -78,6 +80,8 @@ class RequestsAuthSession(AuthClient):
     def session(self):
         if not self.token:
             with self._lock:
-                token = self.oauth_session.fetch_access_token(url=self.token_url)
-                self._update_token(token)
+                if not self.token:
+                    # check again when coming out of the lock that the token is still not set
+                    token = self.oauth_session.fetch_access_token(url=self.token_url)
+                    self._update_token(token)
         return self.oauth_session.session
