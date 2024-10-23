@@ -46,8 +46,7 @@ class RequestsAuthSession(AuthClient):
         token_endpoint: str = TOKEN_ENDPOINT_RELPATH
     ):
         """
-        There is a variety of ways to setup the authentication. See
-        https://github.com/annotell/annotell-python/tree/master/kognic-auth
+        There is a variety of ways to setup the authentication. 
         :param auth: authentication credentials
         :param client_id: client id for authentication
         :param client_secret: client secret for authentication
