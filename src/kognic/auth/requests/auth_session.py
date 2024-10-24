@@ -44,7 +44,7 @@ class RequestsAuthSession(AuthClient):
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
-        **kwargs
+        **kwargs,
     ):
         """
         There is a variety of ways to set up the authentication.
@@ -66,7 +66,7 @@ class RequestsAuthSession(AuthClient):
             token_endpoint_auth_method="client_secret_post",
             update_token=self._update_token,
             token_endpoint=self.token_url,
-            **kwargs
+            **kwargs,
         )
 
         self._lock = threading.RLock()
