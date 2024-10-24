@@ -44,6 +44,7 @@ class RequestsAuthSession(AuthClient):
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+        **kwargs,
     ):
         """
         There is a variety of ways to set up the authentication.
@@ -52,6 +53,7 @@ class RequestsAuthSession(AuthClient):
         :param client_secret: client secret for authentication
         :param host: base url for authentication server
         :param token_endpoint: relative path to the token endpoint
+        :param kwargs: additional params to pass into Client Constructor
         """
         self.host = host
         self.token_url = f"{host}{token_endpoint}"
@@ -64,6 +66,7 @@ class RequestsAuthSession(AuthClient):
             token_endpoint_auth_method="client_secret_post",
             update_token=self._update_token,
             token_endpoint=self.token_url,
+            **kwargs,
         )
 
         self._lock = threading.RLock()
