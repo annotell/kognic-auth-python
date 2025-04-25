@@ -57,6 +57,8 @@ class HttpxAuthAsyncClient(AuthClient):
             grant_type="client_credentials",
             **kwargs,
         )
+        self._oauth_client.register_compliance_hook("access_token_response", AuthClient.check_rate_limit)
+        self._oauth_client.register_compliance_hook("refresh_token_response", AuthClient.check_rate_limit)
 
         self._lock = Lock()
 
