@@ -68,6 +68,8 @@ class RequestsAuthSession(AuthClient):
             token_endpoint=self.token_url,
             **kwargs,
         )
+        self.oauth_session.register_compliance_hook("access_token_response", AuthClient.check_rate_limit)
+        self.oauth_session.register_compliance_hook("refresh_token_response", AuthClient.check_rate_limit)
 
         self._lock = threading.RLock()
 

@@ -31,3 +31,9 @@ class AuthClient:
     @property
     def token(self):
         raise NotImplementedError
+
+    @staticmethod
+    def check_rate_limit(response):
+        if response.status_code == 429:
+            log.error("Client authentication rate limit exceeded! Please slow down.")
+        return response
