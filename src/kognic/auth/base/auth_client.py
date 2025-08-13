@@ -12,7 +12,7 @@ class AuthClient:
         if "expires_in" in self.token:
             log.info(f"Got new token, with ttl={self.token['expires_in']} and expires {self.expires_at}")
         else:
-            log.warning(f"Got new token that is likely not valid: {self.token}")
+            log.warning(f"Got new token that is likely not valid: missing expires_in but got {self.token.keys()}")
 
     @property
     def access_token(self):
