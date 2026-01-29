@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-  "setuptools>45", 
+  "setuptools>45",
   "setuptools_scm[toml]>=6.2"
 ]
 build-backend = "setuptools.build_meta"
@@ -29,6 +29,9 @@ classifiers = [
 [project.urls]
 homepage = "https://github.com/annotell/kognic-auth-python"
 
+[project.scripts]
+kognic-auth = "kognic.auth.cli:main"
+
 [tool.setuptools_scm]
 write_to = "src/kognic/auth/_version.py"
 
@@ -42,6 +45,12 @@ requests = [
 full = [
     "httpx>=0.20,<1",
     "requests>=2.20,<3"
+]
+[dependency-groups]
+dev = [
+    "httpx>=0.20,<1",
+    "requests>=2.20,<3",
+    "pytest",
 ]
 
 [tool.ruff]
