@@ -102,5 +102,6 @@ def resolve_credentials(auth=None, client_id: Optional[str] = None, client_secre
 
 
 if __name__ == "__main__":
-    credentials = get_credentials_from_env()
-    print(credentials)
+    client_id, client_secret = get_credentials_from_env()
+    # Avoid printing secrets; only indicate that credentials were loaded.
+    print(f"Loaded credentials for client_id={client_id!r}")
