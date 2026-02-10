@@ -63,8 +63,8 @@ kognic-auth get-access-token --server https://auth.<env>.kognic.com
 
 ## Base API Clients
 
-For building API clients that need authenticated HTTP requests, use the V2 base clients.
-These provide a requests/httpx-compatible interface with enhancements:
+For building API clients that need authenticated HTTP requests, use the base clients.
+These provide a `requests`/`httpx`-compatible interface with enhancements:
 
 - OAuth2 authentication with automatic token refresh
 - Automatic JSON serialization for jsonable objects
