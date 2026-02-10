@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Optional
 from unittest import TestCase
 
 import httpx
@@ -23,7 +24,7 @@ SUNSET_DATE_WRONG_FORMAT = "2024-02-22T16:21:20Z"  # => error
 url = "https://example.com/endpoint?key=1"
 
 
-def make_requests_response(sunset_date: str | None) -> requests.Response:
+def make_requests_response(sunset_date: Optional[str]) -> requests.Response:
     response = requests.Response()
     if sunset_date:
         response.headers[SUNSET_HEADER] = sunset_date
@@ -31,12 +32,12 @@ def make_requests_response(sunset_date: str | None) -> requests.Response:
     return response
 
 
-def make_httpx_response(sunset_date: str | None) -> httpx.Response:
+def make_httpx_response(sunset_date: Optional[str]) -> httpx.Response:
     headers = {SUNSET_HEADER: sunset_date} if sunset_date else None
     return httpx.Response(status_code=200, headers=headers, request=httpx.Request("GET", url))
 
 
-def run_test_with_response(caplog, response, expected_log_level: str | None):
+def run_test_with_response(caplog, response, expected_log_level: Optional[str]):
     handle_sunset(response)
     if expected_log_level:
         log_record = caplog.records[0]
