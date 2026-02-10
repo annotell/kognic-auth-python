@@ -211,5 +211,64 @@ async with MyAsyncApiClient() as client:
     resource = await client.get_resource("123")
 ```
 
+## Serialization & Deserialization
+
+The `kognic.auth.serde` module provides utilities for serializing request bodies and deserializing responses.
+
+### Serialization
+
+`serialize_body()` converts objects to JSON-compatible dicts. Supports:
+- Pydantic v2 models (`model_dump()`)
+- Objects with `to_json()` or `to_dict()` methods
+- Nested objects in dicts/lists are recursively serialized
+
+```python
+from pydantic import BaseModel
+from kognic.auth.serde import serialize_body
+
+class CreateRequest(BaseModel):
+    name: str
+    value: int
+
+# Pydantic models
+request = CreateRequest(name="test", value=42)
+serialize_body(request)  # {"name": "test", "value": 42}
+
+# Nested in containers
+serialize_body({"items": [request]})  # {"items": [{"name": "test", "value": 42}]}
+
+# Custom classes with to_dict()
+class MyModel:
+    def to_dict(self):
+        return {"key": "value"}
+
+serialize_body(MyModel())  # {"key": "value"}
+```
+
+### Deserialization
+
+`deserialize()` extracts and converts API responses. Supports:
+- Pydantic v2 models (`model_validate()`)
+- Classes with `from_dict()` or `from_json()` methods
+- Automatic envelope extraction (default key: `"data"`)
+
+```python
+from kognic.auth.serde import deserialize
+
+# Deserialize to Pydantic model
+response = client.session.get("https://api.app.kognic.com/v1/resource/123")
+resource = deserialize(response, cls=ResourceModel)
+
+# Deserialize list of models
+response = client.session.get("https://api.app.kognic.com/v1/resources")
+resources = deserialize(response, cls=list[ResourceModel])
+
+# Custom envelope key
+data = deserialize(response, cls=MyModel, enveloped_key="result")
+
+# No envelope
+data = deserialize(response, cls=MyModel, enveloped_key=None)
+```
+
 ## Changelog
 See Github releases from v3.1.0, historic changelog is available in CHANGELOG.md
