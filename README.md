@@ -61,5 +61,52 @@ kognic-auth get-access-token --credentials ~/.config/kognic/credentials.json
 kognic-auth get-access-token --server https://auth.<env>.kognic.com
 ```
 
+## Base API Clients
+
+For building API clients that need authenticated HTTP requests, use the V2 base clients.
+These provide a requests/httpx-compatible interface with enhancements:
+
+- OAuth2 authentication with automatic token refresh
+- Automatic JSON serialization for jsonable objects
+- Retry logic for transient errors (502, 503, 504)
+- Sunset header handling (logs warnings for deprecated endpoints)
+- Enhanced error messages with response body details
+
+### Sync Client (requests)
+
+```python
+from kognic.auth.requests import BaseApiClient
+
+class MyApiClient(BaseApiClient):
+    def get_resource(self, resource_id: str):
+        response = self.session.get(f"https://api.app.kognic.com/v1/resources/{resource_id}")
+        return response.json()
+
+# Usage with environment variables
+client = MyApiClient()
+
+# Or with explicit credentials
+client = MyApiClient(client_id="...", client_secret="...")
+
+# Or with credentials file
+client = MyApiClient(auth="~/.config/kognic/credentials.json")
+```
+
+### Async Client (httpx)
+
+```python
+from kognic.auth.httpx import BaseAsyncApiClient
+
+class MyAsyncApiClient(BaseAsyncApiClient):
+    async def get_resource(self, resource_id: str):
+        session = await self.session
+        response = await session.get(f"https://api.app.kognic.com/v1/resources/{resource_id}")
+        return response.json()
+
+# Usage as async context manager
+async with MyAsyncApiClient() as client:
+    resource = await client.get_resource("123")
+```
+
 ## Changelog
 See Github releases from v3.1.0, historic changelog is available in CHANGELOG.md

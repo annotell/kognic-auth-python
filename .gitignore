@@ -27,3 +27,4 @@
 
 **/key.json
 src/kognic/auth/_version.py
+.claude/
