@@ -1,8 +1,31 @@
 """Serialization and deserialization utilities for HTTP request/response bodies."""
 
+from collections.abc import MutableMapping, MutableSequence
 from typing import Any, Dict, List, Optional, Type, Union
 
 ENVELOPED_KEY = "data"
+
+
+def _is_list_type(cls: Type) -> bool:
+    """Check if cls is a list-like type (list, List, List[T], or MutableSequence subclass)."""
+    try:
+        return issubclass(cls.__origin__, MutableSequence)
+    except (AttributeError, TypeError):
+        try:
+            return issubclass(cls, MutableSequence)
+        except TypeError:
+            return False
+
+
+def _is_dict_type(cls: Type) -> bool:
+    """Check if cls is a dict-like type (dict, Dict, Dict[K,V], or MutableMapping subclass)."""
+    try:
+        return issubclass(cls.__origin__, MutableMapping)
+    except (AttributeError, TypeError):
+        try:
+            return issubclass(cls, MutableMapping)
+        except TypeError:
+            return False
 
 
 def serialize_body(body: Any) -> Any:
@@ -36,6 +59,8 @@ def _serialize_value(value: Any) -> Any:
         return {k: _serialize_value(v) for k, v in value.items()}
     if isinstance(value, list):
         return [_serialize_value(item) for item in value]
+    if hasattr(value, "model_dump") and callable(value.model_dump):  # Pydantic v2
+        return _serialize_value(value.model_dump())
     if hasattr(value, "to_json") and callable(value.to_json):
         return _serialize_value(value.to_json())
     if hasattr(value, "to_dict") and callable(value.to_dict):
@@ -89,23 +114,18 @@ def deserialize(
     if cls is None:
         return data
 
-    # For basic types (dict, list without inner type), return the data as-is
-    if cls in (dict, list):
+    # For dict-like types, return the data as-is
+    if _is_dict_type(cls):
         return data
 
-    # Handle generic types like Dict[str, str] or list[MyModel]
-    origin = getattr(cls, "__origin__", None)
-    if origin is dict:
-        return data
-
-    # Handle list[SomeClass] - deserialize each item
-    if origin is list:
+    # Handle list-like types
+    if _is_list_type(cls):
         args = getattr(cls, "__args__", ())
         if not args:
             return data
         inner_cls = args[0]
-        # If inner type is a basic type, return as-is
-        if inner_cls in (dict, list, str, int, float, bool) or getattr(inner_cls, "__origin__", None) is not None:
+        # If inner type is a basic type or generic, return as-is
+        if inner_cls in (dict, list, str, int, float, bool) or _is_dict_type(inner_cls) or _is_list_type(inner_cls):
             return data
         # Deserialize each item using inner class
         return [_deserialize_object(item, inner_cls) for item in data]
@@ -115,7 +135,16 @@ def deserialize(
 
 
 def _deserialize_object(data: Any, cls: Type) -> Any:
-    """Deserialize a single object using duck-typed from_dict/from_json."""
+    """Deserialize a single object using duck-typed methods.
+
+    Supports:
+    - Pydantic v2 models (model_validate)
+    - Classes with from_dict() class method
+    - Classes with from_json() class method
+    """
+    if hasattr(cls, "model_validate") and callable(cls.model_validate):  # Pydantic v2
+        return cls.model_validate(data)
+
     if hasattr(cls, "from_dict") and callable(cls.from_dict):
         return cls.from_dict(data)
 
@@ -123,5 +152,6 @@ def _deserialize_object(data: Any, cls: Type) -> Any:
         return cls.from_json(data)
 
     raise TypeError(
-        f"Cannot deserialize to {cls.__name__}. " f"Class must have a from_dict() or from_json() class method."
+        f"Cannot deserialize to {cls.__name__}. "
+        f"Class must have model_validate(), from_dict(), or from_json() class method."
     )
