@@ -10,11 +10,11 @@ from requests import Session
 from requests.adapters import HTTPAdapter, Retry
 
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
-from kognic.auth._serde import serialize_body
 from kognic.auth._sunset import handle_sunset
 from kognic.auth._user_agent import get_user_agent
 from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.requests.auth_session import RequestsAuthSession
+from kognic.auth.serde import serialize_body
 
 logger = logging.getLogger(__name__)
 
