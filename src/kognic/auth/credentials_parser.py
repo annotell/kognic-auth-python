@@ -67,18 +67,6 @@ def get_credentials_from_env():
     client_id = os.getenv("KOGNIC_CLIENT_ID")
     client_secret = os.getenv("KOGNIC_CLIENT_SECRET")
 
-    if client_id and client_secret:
-        return client_id, client_secret
-
-    # fallbacks
-    creds = os.getenv("ANNOTELL_CREDENTIALS")
-    if creds:
-        client_credentials = parse_credentials(creds)
-        return client_credentials.client_id, client_credentials.client_secret
-
-    client_id = os.getenv("ANNOTELL_CLIENT_ID")
-    client_secret = os.getenv("ANNOTELL_CLIENT_SECRET")
-
     return client_id, client_secret
 
 
