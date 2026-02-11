@@ -59,6 +59,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
         json_serializer: Callable[[Any], Any] = serialize_body,
+        **kwargs,
     ):
         """Initialize the async API client.
 
@@ -68,21 +69,23 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             auth_token_endpoint: Relative path to token endpoint
             client_name: Name added to User-Agent. Use "auto" for class name, None for no name.
             json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
+            **kwargs: Additional arguments passed to the underlying httpx client (e.g. timeout, verify).
         """
         if client_name == "auto":
             client_name = self.__class__.__name__
 
         # Use a custom transport to set the number of retries for connection errors
-        transport = httpx.AsyncHTTPTransport(retries=3)
+        kwargs.setdefault("transport", httpx.AsyncHTTPTransport(retries=3))
 
-        headers = {"User-Agent": get_user_agent(f"python-httpx/{httpx.__version__}", client_name)}
+        headers = kwargs.pop("headers", {})
+        headers.setdefault("User-Agent", get_user_agent(f"python-httpx/{httpx.__version__}", client_name))
 
         super().__init__(
             auth=auth,
             host=auth_host,
             token_endpoint=auth_token_endpoint,
-            transport=transport,
             headers=headers,
+            **kwargs,
         )
 
         # Monkey patch the request method to handle sunset, errors and custom error handling

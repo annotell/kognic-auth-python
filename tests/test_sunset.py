@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from unittest import TestCase
 
@@ -16,10 +16,11 @@ def date_to_str(date: datetime):
 
 
 SUNSET_DATE_LONG_TIME_AGO = "2024-02-22T16:21:20.880547Z"  # => error
-SUNSET_DATE_5_DAYS_AGO = date_to_str(datetime.now())  # now => error
-SUNSET_DATE_IN_13_DAYS = date_to_str(datetime.now() + timedelta(days=13))  # in 13 days => error
-SUNSET_DATE_IN_15_DAYS = date_to_str(datetime.now() + timedelta(days=15))  # in 15 days => warning
-SUNSET_DATE_WRONG_FORMAT = "2024-02-22T16:21:20Z"  # => error
+SUNSET_DATE_5_DAYS_AGO = date_to_str(datetime.now(tz=timezone.utc))  # now => error
+SUNSET_DATE_IN_13_DAYS = date_to_str(datetime.now(tz=timezone.utc) + timedelta(days=13))  # in 13 days => error
+SUNSET_DATE_IN_15_DAYS = date_to_str(datetime.now(tz=timezone.utc) + timedelta(days=15))  # in 15 days => warning
+SUNSET_DATE_NO_MICROSECONDS = "2024-02-22T16:21:20Z"  # no microseconds => error (long time ago)
+SUNSET_DATE_WRONG_FORMAT = "22/02/2024 16:21:20"  # unsupported format => ignored
 
 url = "https://example.com/endpoint?key=1"
 
@@ -59,6 +60,10 @@ class TestSunsetDateRequests(TestCase):
         response = make_requests_response(SUNSET_DATE_WRONG_FORMAT)
         run_test_with_response(self._caplog, response, None)
 
+    def test_when_sunset_date_no_microseconds(self):
+        response = make_requests_response(SUNSET_DATE_NO_MICROSECONDS)
+        run_test_with_response(self._caplog, response, "ERROR")
+
     def test_when_sunset_date_long_time_ago(self):
         response = make_requests_response(SUNSET_DATE_LONG_TIME_AGO)
         run_test_with_response(self._caplog, response, "ERROR")
@@ -88,6 +93,10 @@ class TestSunsetDateHttpx(TestCase):
     def test_when_sunset_date_invalid(self):
         response = make_httpx_response(SUNSET_DATE_WRONG_FORMAT)
         run_test_with_response(self._caplog, response, None)
+
+    def test_when_sunset_date_no_microseconds(self):
+        response = make_httpx_response(SUNSET_DATE_NO_MICROSECONDS)
+        run_test_with_response(self._caplog, response, "ERROR")
 
     def test_when_sunset_date_long_time_ago(self):
         response = make_httpx_response(SUNSET_DATE_LONG_TIME_AGO)

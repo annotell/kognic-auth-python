@@ -101,6 +101,7 @@ def create_session(
         auth_host: Authentication server base URL
         auth_token_endpoint: Relative path to token endpoint
         client_name: Name added to User-Agent header
+        json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
 
     Returns:
         Configured requests Session

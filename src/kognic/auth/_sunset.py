@@ -1,7 +1,7 @@
 """Sunset header handling for deprecated API endpoints."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
@@ -10,8 +10,9 @@ if TYPE_CHECKING:
 SUNSET_HEADER = "sunset-date"
 SUNSET_DIFF_THRESHOLD = 14 * 60 * 60 * 24  # two weeks
 
-# Expected format of sunset date, e.g. 2024-02-22T16:21:20.880547Z
+# Expected formats of sunset date
 DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
+DATETIME_FMT_NO_MICRO = "%Y-%m-%dT%H:%M:%SZ"
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def handle_sunset(response: "Response") -> None:
     if not sunset_date:
         return None
 
-    now = datetime.now()
+    now = datetime.now(tz=timezone.utc)
     diff = sunset_date - now
 
     log_method = logger.warning if diff.total_seconds() > SUNSET_DIFF_THRESHOLD else logger.error
@@ -38,11 +39,13 @@ def handle_sunset(response: "Response") -> None:
 
 
 def _parse_date(date: str) -> Optional[datetime]:
-    """Parse sunset date string to datetime."""
-    try:
-        return datetime.strptime(date, DATETIME_FMT)
-    except ValueError:
-        return None
+    """Parse sunset date string to UTC datetime."""
+    for fmt in (DATETIME_FMT, DATETIME_FMT_NO_MICRO):
+        try:
+            return datetime.strptime(date, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
 
 
 def _parse_url(url: Union[str, "Url"]) -> str:
