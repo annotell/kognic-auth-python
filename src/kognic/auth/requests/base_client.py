@@ -3,7 +3,7 @@
 import logging
 from functools import lru_cache
 from threading import Lock
-from typing import Optional, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union
 
 import requests
 from requests import Session
@@ -87,6 +87,7 @@ def create_session(
     auth_host: str = DEFAULT_HOST,
     token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     client_name: Optional[str] = None,
+    json_serializer: Callable[[Any], Any] = serialize_body,
 ) -> Session:
     """Create a requests session with enhancements.
 
@@ -127,7 +128,7 @@ def create_session(
 
         # Accept anything jsonable as json, serialize it
         if req.json is not None:
-            req.json = serialize_body(req.json)
+            req.json = json_serializer(req.json)
 
         return vanilla_prep(req, *args, **kwargs)
 
@@ -173,6 +174,7 @@ class BaseApiClient:
         auth_host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
+        json_serializer: Callable[[Any], Any] = serialize_body,
     ):
         """Initialize the API client.
 
@@ -183,6 +185,7 @@ class BaseApiClient:
             auth_host: Authentication server base URL
             token_endpoint: Relative path to token endpoint
             client_name: Name added to User-Agent. Use "auto" for class name, None for no name.
+            json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
         """
         self._session: Optional[Session] = None
         self._auth = auth
@@ -190,6 +193,7 @@ class BaseApiClient:
         self._client_secret = client_secret
         self._auth_host = auth_host
         self._token_endpoint = token_endpoint
+        self._json_serializer = json_serializer
         self._lock = Lock()
 
         if client_name == "auto":
@@ -212,5 +216,6 @@ class BaseApiClient:
                         auth_host=self._auth_host,
                         token_endpoint=self._token_endpoint,
                         client_name=self._client_name,
+                        json_serializer=self._json_serializer,
                     )
         return self._session
