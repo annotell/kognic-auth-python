@@ -55,10 +55,8 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         self,
         *,
         auth: Optional[Union[str, tuple]] = None,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
         auth_host: str = DEFAULT_HOST,
-        token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+        auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
         json_serializer: Callable[[Any], Any] = serialize_body,
     ):
@@ -66,10 +64,8 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
 
         Args:
             auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
-            client_id: OAuth2 client ID (alternative to auth)
-            client_secret: OAuth2 client secret (alternative to auth)
             auth_host: Authentication server base URL
-            token_endpoint: Relative path to token endpoint
+            auth_token_endpoint: Relative path to token endpoint
             client_name: Name added to User-Agent. Use "auto" for class name, None for no name.
             json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
         """
@@ -83,10 +79,8 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
 
         super().__init__(
             auth=auth,
-            client_id=client_id,
-            client_secret=client_secret,
             host=auth_host,
-            token_endpoint=token_endpoint,
+            token_endpoint=auth_token_endpoint,
             transport=transport,
             headers=headers,
         )

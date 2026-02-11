@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 def _create_cached_oauth_session(
     auth_tuple: Optional[Tuple[str, str]],
     auth_host: str,
-    token_endpoint: str,
+    auth_token_endpoint: str,
 ) -> Session:
     """Create and cache an OAuth session by credentials.
 
@@ -35,12 +35,12 @@ def _create_cached_oauth_session(
             client_id=client_id,
             client_secret=client_secret,
             host=auth_host,
-            token_endpoint=token_endpoint,
+            token_endpoint=auth_token_endpoint,
         ).session
     else:
         return RequestsAuthSession(
             host=auth_host,
-            token_endpoint=token_endpoint,
+            token_endpoint=auth_token_endpoint,
         ).session
 
 
@@ -82,10 +82,8 @@ def _resolve_auth_tuple(
 def create_session(
     *,
     auth: Optional[Union[str, tuple]] = None,
-    client_id: Optional[str] = None,
-    client_secret: Optional[str] = None,
     auth_host: str = DEFAULT_HOST,
-    token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+    auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     client_name: Optional[str] = None,
     json_serializer: Callable[[Any], Any] = serialize_body,
 ) -> Session:
@@ -100,18 +98,16 @@ def create_session(
 
     Args:
         auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
-        client_id: OAuth2 client ID (alternative to auth)
-        client_secret: OAuth2 client secret (alternative to auth)
         auth_host: Authentication server base URL
-        token_endpoint: Relative path to token endpoint
+        auth_token_endpoint: Relative path to token endpoint
         client_name: Name added to User-Agent header
 
     Returns:
         Configured requests Session
     """
     # Resolve credentials and get cached OAuth session
-    auth_tuple = _resolve_auth_tuple(auth, client_id, client_secret)
-    session = _create_cached_oauth_session(auth_tuple, auth_host, token_endpoint)
+    auth_tuple = _resolve_auth_tuple(auth, client_id=None, client_secret=None)
+    session = _create_cached_oauth_session(auth_tuple, auth_host, auth_token_endpoint)
 
     session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", client_name)
 
@@ -169,10 +165,8 @@ class BaseApiClient:
         self,
         *,
         auth: Optional[Union[str, tuple]] = None,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
         auth_host: str = DEFAULT_HOST,
-        token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+        auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
         json_serializer: Callable[[Any], Any] = serialize_body,
     ):
@@ -180,19 +174,15 @@ class BaseApiClient:
 
         Args:
             auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
-            client_id: OAuth2 client ID (alternative to auth)
-            client_secret: OAuth2 client secret (alternative to auth)
             auth_host: Authentication server base URL
-            token_endpoint: Relative path to token endpoint
+            auth_token_endpoint: Relative path to token endpoint
             client_name: Name added to User-Agent. Use "auto" for class name, None for no name.
             json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
         """
         self._session: Optional[Session] = None
         self._auth = auth
-        self._client_id = client_id
-        self._client_secret = client_secret
         self._auth_host = auth_host
-        self._token_endpoint = token_endpoint
+        self._auth_token_endpoint = auth_token_endpoint
         self._json_serializer = json_serializer
         self._lock = Lock()
 
@@ -211,10 +201,8 @@ class BaseApiClient:
                 if self._session is None:
                     self._session = create_session(
                         auth=self._auth,
-                        client_id=self._client_id,
-                        client_secret=self._client_secret,
                         auth_host=self._auth_host,
-                        token_endpoint=self._token_endpoint,
+                        auth_token_endpoint=self._auth_token_endpoint,
                         client_name=self._client_name,
                         json_serializer=self._json_serializer,
                     )
