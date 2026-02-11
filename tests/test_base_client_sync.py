@@ -62,7 +62,7 @@ class TestBaseApiClient(unittest.TestCase):
         mock_instance.session = MagicMock()
         mock_session_class.return_value = mock_instance
 
-        client = BaseApiClient(client_id="test", client_secret="secret")
+        client = BaseApiClient(auth=("test", "secret"))
 
         # Session should not be created yet
         self.assertIsNone(client._session)
@@ -84,7 +84,7 @@ class TestBaseApiClient(unittest.TestCase):
         class MyCustomClient(BaseApiClient):
             pass
 
-        client = MyCustomClient(client_id="test", client_secret="secret")
+        client = MyCustomClient(auth=("test", "secret"))
         self.assertEqual(client._client_name, "MyCustomClient")
 
 
