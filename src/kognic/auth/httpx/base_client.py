@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import httpx
 
@@ -60,6 +60,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         auth_host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
+        json_serializer: Callable[[Any], Any] = serialize_body,
     ):
         """Initialize the async API client.
 
@@ -70,6 +71,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             auth_host: Authentication server base URL
             token_endpoint: Relative path to token endpoint
             client_name: Name added to User-Agent. Use "auto" for class name, None for no name.
+            json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
         """
         if client_name == "auto":
             client_name = self.__class__.__name__
@@ -96,7 +98,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             # Accept anything jsonable as json, serialize it
             json = kwargs.pop("json", None)
             if json is not None:
-                kwargs["json"] = serialize_body(json)
+                kwargs["json"] = json_serializer(json)
 
             # Wrap the request in simple retry logic for transient errors
             async def call_with_simple_retry(attempts):
