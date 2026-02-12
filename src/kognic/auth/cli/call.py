@@ -7,7 +7,7 @@ import json
 import sys
 from typing import Any
 
-from kognic.auth.config import DEFAULT_CONFIG_PATH, load_config, resolve_context
+from kognic.auth.env_config import DEFAULT_CONFIG_PATH, load_kognic_env_config, resolve_environment
 from kognic.auth.requests.auth_session import RequestsAuthSession
 
 COMMAND = "call"
@@ -41,9 +41,7 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
         default=DEFAULT_CONFIG_PATH,
         help=f"Config file path (default: {DEFAULT_CONFIG_PATH})",
     )
-    call_parser.add_argument(
-        "--context", dest="context_name", help="Force a specific context (skip URL-based matching)"
-    )
+    call_parser.add_argument("--env", dest="env_name", help="Force a specific environment (skip URL-based matching)")
     call_parser.add_argument(
         "--format",
         dest="output_format",
@@ -164,12 +162,12 @@ def _print_response(response: Any, *, output_format: str = "json") -> None:
 
 def run(parsed: argparse.Namespace) -> int:
     try:
-        config = load_config(parsed.config)
-        context = resolve_context(config, parsed.url, parsed.context_name)
+        config = load_kognic_env_config(parsed.config)
+        env = resolve_environment(config, parsed.url, parsed.env_name)
 
         session = RequestsAuthSession(
-            auth=context.credentials,
-            host=context.auth_server,
+            auth=env.credentials,
+            host=env.auth_server,
         )
 
         headers = _parse_headers(parsed.headers) or {}

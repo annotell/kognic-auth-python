@@ -1,6 +1,9 @@
 """Unit tests for BaseApiClient (sync client)."""
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from kognic.auth._sunset import DATETIME_FMT, handle_sunset
@@ -86,6 +89,107 @@ class TestBaseApiClient(unittest.TestCase):
 
         client = MyCustomClient(auth=("test", "secret"))
         self.assertEqual(client._client_name, "MyCustomClient")
+
+
+class TestBaseApiClientFromEnv(unittest.TestCase):
+    def _write_config(self, data):
+        f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        json.dump(data, f)
+        f.flush()
+        f.close()
+        return f.name
+
+    @patch("kognic.auth.requests.base_client.RequestsAuthSession")
+    def test_from_env_sets_auth_and_host(self, mock_session_class):
+        from kognic.auth.requests.base_client import BaseApiClient
+
+        mock_instance = MagicMock()
+        mock_instance.session = MagicMock()
+        mock_session_class.return_value = mock_instance
+
+        config_path = self._write_config(
+            {
+                "contexts": {
+                    "demo": {
+                        "host": "demo.kognic.com",
+                        "auth_server": "https://auth.demo.kognic.com",
+                        "credentials": "/tmp/demo-creds.json",
+                    }
+                }
+            }
+        )
+        try:
+            client = BaseApiClient.from_env("demo", env_config_path=config_path)
+            self.assertEqual(client._auth, "/tmp/demo-creds.json")
+            self.assertEqual(client._auth_host, "https://auth.demo.kognic.com")
+        finally:
+            Path(config_path).unlink()
+
+    @patch("kognic.auth.requests.base_client.RequestsAuthSession")
+    def test_explicit_auth_overrides_env_credentials(self, mock_session_class):
+        from kognic.auth.requests.base_client import BaseApiClient
+
+        mock_instance = MagicMock()
+        mock_instance.session = MagicMock()
+        mock_session_class.return_value = mock_instance
+
+        config_path = self._write_config(
+            {
+                "contexts": {
+                    "demo": {
+                        "host": "demo.kognic.com",
+                        "auth_server": "https://auth.demo.kognic.com",
+                        "credentials": "/tmp/demo-creds.json",
+                    }
+                }
+            }
+        )
+        try:
+            client = BaseApiClient.from_env("demo", env_config_path=config_path, auth=("my-id", "my-secret"))
+            self.assertEqual(client._auth, ("my-id", "my-secret"))
+            self.assertEqual(client._auth_host, "https://auth.demo.kognic.com")
+        finally:
+            Path(config_path).unlink()
+
+    def test_unknown_env_raises(self):
+        from kognic.auth.requests.base_client import BaseApiClient
+
+        config_path = self._write_config({"contexts": {}})
+        try:
+            with self.assertRaises(ValueError) as cm:
+                BaseApiClient.from_env("nonexistent", env_config_path=config_path)
+            self.assertIn("Unknown environment", str(cm.exception))
+        finally:
+            Path(config_path).unlink()
+
+    @patch("kognic.auth.requests.base_client.RequestsAuthSession")
+    def test_from_env_works_on_subclass(self, mock_session_class):
+        from kognic.auth.requests.base_client import BaseApiClient
+
+        mock_instance = MagicMock()
+        mock_instance.session = MagicMock()
+        mock_session_class.return_value = mock_instance
+
+        class MyClient(BaseApiClient):
+            pass
+
+        config_path = self._write_config(
+            {
+                "contexts": {
+                    "demo": {
+                        "host": "demo.kognic.com",
+                        "auth_server": "https://auth.demo.kognic.com",
+                        "credentials": "/tmp/demo-creds.json",
+                    }
+                }
+            }
+        )
+        try:
+            client = MyClient.from_env("demo", env_config_path=config_path)
+            self.assertIsInstance(client, MyClient)
+            self.assertEqual(client._client_name, "MyClient")
+        finally:
+            Path(config_path).unlink()
 
 
 if __name__ == "__main__":

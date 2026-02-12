@@ -13,6 +13,7 @@ from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import handle_sunset
 from kognic.auth._user_agent import get_user_agent
 from kognic.auth.credentials_parser import resolve_credentials
+from kognic.auth.env_config import DEFAULT_CONFIG_PATH, load_kognic_env_config
 from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.serde import serialize_body
 
@@ -29,19 +30,11 @@ def _create_cached_oauth_session(
 
     Caching avoids creating multiple sessions for the same credentials.
     """
-    if auth_tuple:
-        client_id, client_secret = auth_tuple
-        return RequestsAuthSession(
-            client_id=client_id,
-            client_secret=client_secret,
-            host=auth_host,
-            token_endpoint=auth_token_endpoint,
-        ).session
-    else:
-        return RequestsAuthSession(
-            host=auth_host,
-            token_endpoint=auth_token_endpoint,
-        ).session
+    return RequestsAuthSession(
+        auth=auth_tuple,
+        host=auth_host,
+        token_endpoint=auth_token_endpoint,
+    ).session
 
 
 DEFAULT_RETRY = Retry(total=3, connect=3, read=3, backoff_factor=0.5, status_forcelist=[502, 503, 504])
@@ -90,7 +83,6 @@ def create_session(
     """Create a requests session with enhancements.
 
     - OAuth2 authentication with automatic token refresh
-    - Accept-Encoding: gzip header
     - Automatic JSON serialization for jsonable objects
     - Default retry logic for transient errors
     - Sunset header handling
@@ -112,7 +104,6 @@ def create_session(
 
     session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", client_name)
 
-    session.headers["Accept-Encoding"] = "gzip"
     session.mount("http://", HTTPAdapter(max_retries=DEFAULT_RETRY))
     session.mount("https://", HTTPAdapter(max_retries=DEFAULT_RETRY))
 
@@ -208,3 +199,31 @@ class BaseApiClient:
                         json_serializer=self._json_serializer,
                     )
         return self._session
+
+    @classmethod
+    def from_env(
+        cls,
+        env: str,
+        *,
+        env_config_path: str = "",
+        **kwargs,
+    ) -> "BaseApiClient":
+        """Create a client from a named environment in the config file.
+
+        Args:
+            env: Environment name to look up in the config file.
+            env_config_path: Path to config file. Defaults to ~/.config/kognic/config.json.
+            **kwargs: Additional arguments passed to the constructor (e.g. client_name, json_serializer).
+
+        Returns:
+            Configured BaseApiClient instance.
+        """
+
+        config_file_path = env_config_path or DEFAULT_CONFIG_PATH
+        cfg = load_kognic_env_config(config_file_path)
+        if env not in cfg.environments:
+            raise ValueError(f"Unknown environment: {env} not found in config at {config_file_path}")
+        resolved = cfg.environments[env]
+        kwargs.setdefault("auth", resolved.credentials)
+        kwargs["auth_host"] = resolved.auth_server
+        return cls(**kwargs)

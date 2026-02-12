@@ -46,14 +46,15 @@ class RequestsAuthSession(AuthClient):
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         **kwargs,
     ):
-        """
-        There is a variety of ways to set up the authentication.
-        :param auth: authentication credentials
-        :param client_id: client id for authentication
-        :param client_secret: client secret for authentication
-        :param host: base url for authentication server
-        :param token_endpoint: relative path to the token endpoint
-        :param kwargs: additional params to pass into Client Constructor
+        """Initialize the auth session.
+
+        Args:
+            auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
+            client_id: Client id for authentication
+            client_secret: Client secret for authentication
+            host: Base url for authentication server
+            token_endpoint: Relative path to the token endpoint
+            **kwargs: Additional params to pass into Client Constructor
         """
         self.host = host
         self.token_url = f"{host}{token_endpoint}"

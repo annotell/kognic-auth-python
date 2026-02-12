@@ -9,6 +9,7 @@ import httpx
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import handle_sunset
 from kognic.auth._user_agent import get_user_agent
+from kognic.auth.env_config import DEFAULT_CONFIG_PATH, load_kognic_env_config
 from kognic.auth.httpx.async_client import HttpxAuthAsyncClient
 from kognic.auth.serde import serialize_body
 
@@ -92,6 +93,9 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         client_request = self._oauth_client.request
 
         async def request(method, url, **kwargs):
+            if isinstance(url, str) and url.startswith("/"):
+                raise ValueError(f"Path must not start with /, got {url}")
+
             # Accept anything jsonable as json, serialize it
             json = kwargs.pop("json", None)
             if json is not None:
@@ -115,6 +119,33 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             return resp
 
         self._oauth_client.request = request
+
+    @classmethod
+    def from_env(
+        cls,
+        env: str,
+        *,
+        env_config_path: str = "",
+        **kwargs,
+    ) -> "BaseAsyncApiClient":
+        """Create a client from a named environment in the config file.
+
+        Args:
+            env: Environment name to look up in the config file.
+            env_config_path: Path to config file. Defaults to ~/.config/kognic/config.json.
+            **kwargs: Additional arguments passed to the constructor (e.g. client_name, json_serializer).
+
+        Returns:
+            Configured BaseAsyncApiClient instance.
+        """
+        config_file_path = env_config_path or DEFAULT_CONFIG_PATH
+        cfg = load_kognic_env_config(config_file_path)
+        if env not in cfg.environments:
+            raise ValueError(f"Unknown environment: {env} not found in config at {config_file_path}")
+        resolved = cfg.environments[env]
+        kwargs.setdefault("auth", resolved.credentials)
+        kwargs["auth_host"] = resolved.auth_server
+        return cls(**kwargs)
 
     async def __aenter__(self) -> "BaseAsyncApiClient":
         """Async context manager entry."""

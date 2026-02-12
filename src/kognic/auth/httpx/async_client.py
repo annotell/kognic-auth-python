@@ -1,6 +1,5 @@
 import logging
 from asyncio import Lock
-from typing import Optional
 
 import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
@@ -29,25 +28,22 @@ class HttpxAuthAsyncClient(AuthClient):
         self,
         *,
         auth=None,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         **kwargs,
     ):
-        """
-        There is a variety of ways to set up the authentication.
-        :param auth: authentication credentials
-        :param client_id: client id for authentication
-        :param client_secret: client secret for authentication
-        :param host: base url for authentication server
-        :param token_endpoint: relative path to the token endpoint
-        :param kwargs: additional params to pass into Httpx Client Constructor
+        """Initialize the async auth client.
+
+        Args:
+            auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
+            host: Base url for authentication server
+            token_endpoint: Relative path to the token endpoint
+            **kwargs: Additional params to pass into Httpx Client Constructor
         """
         self.host = host
         self.token_url = f"{host}{token_endpoint}"
 
-        client_id, client_secret = resolve_credentials(auth, client_id, client_secret)
+        client_id, client_secret = resolve_credentials(auth)
 
         self._oauth_client = _AsyncFixedClient(
             client_id=client_id,
@@ -66,7 +62,7 @@ class HttpxAuthAsyncClient(AuthClient):
     def token(self):
         return self._oauth_client.token
 
-    async def _update_token(self, token: OAuth2Token, refresh_token=None, access_token=None):
+    async def _update_token(self, token: OAuth2Token, access_token=None, refresh_token=None):
         self._log_new_token()
 
     @property
