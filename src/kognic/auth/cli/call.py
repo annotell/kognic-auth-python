@@ -37,9 +37,9 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Header in 'Key: Value' format (repeatable)",
     )
     call_parser.add_argument(
-        "--config",
+        "--env-config-file-path",
         default=DEFAULT_CONFIG_PATH,
-        help=f"Config file path (default: {DEFAULT_CONFIG_PATH})",
+        help=f"Environment config file path (default: {DEFAULT_CONFIG_PATH})",
     )
     call_parser.add_argument("--env", dest="env_name", help="Force a specific environment (skip URL-based matching)")
     call_parser.add_argument(
@@ -162,7 +162,7 @@ def _print_response(response: Any, *, output_format: str = "json") -> None:
 
 def run(parsed: argparse.Namespace) -> int:
     try:
-        config = load_kognic_env_config(parsed.config)
+        config = load_kognic_env_config(parsed.env_config_file_path)
         env = resolve_environment(config, parsed.url, parsed.env_name)
 
         session = RequestsAuthSession(

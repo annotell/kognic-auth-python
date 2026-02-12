@@ -72,14 +72,14 @@ Each environment has the following fields:
 Generate an access token for Kognic API authentication.
 
 ```bash
-kognic-auth get-access-token [--server SERVER] [--credentials FILE] [--env NAME] [--config FILE]
+kognic-auth get-access-token [--server SERVER] [--credentials FILE] [--env NAME] [--env-config-file-path FILE]
 ```
 
 **Options:**
 - `--server` - Authentication server URL (default: `https://auth.app.kognic.com`)
 - `--credentials` - Path to JSON credentials file. If not provided, credentials are read from environment variables.
 - `--env` - Use a named environment from the config file.
-- `--config` - Config file path (default: `~/.config/kognic/config.json`)
+- `--env-config-file-path` - Environment config file path (default: `~/.config/kognic/config.json`)
 
 When `--env` is provided, the auth server and credentials are resolved from the config file. Explicit `--server` or `--credentials` flags override the environment values.
 
@@ -103,7 +103,7 @@ kognic-auth get-access-token --env demo --server https://custom.server
 Make an authenticated HTTP request to a Kognic API.
 
 ```bash
-kognic-auth call URL [-X METHOD] [-d DATA] [-H HEADER] [--format FORMAT] [--env NAME] [--config FILE]
+kognic-auth call URL [-X METHOD] [-d DATA] [-H HEADER] [--format FORMAT] [--env NAME] [--env-config-file-path FILE]
 ```
 
 **Options:**
@@ -113,7 +113,7 @@ kognic-auth call URL [-X METHOD] [-d DATA] [-H HEADER] [--format FORMAT] [--env 
 - `-H`, `--header` - Header in `Key: Value` format (repeatable)
 - `--format` - Output format (default: `json`). See [Output formats](#output-formats) below.
 - `--env` - Force a specific environment (skip URL-based matching)
-- `--config` - Config file path (default: `~/.config/kognic/config.json`)
+- `--env-config-file-path` - Environment config file path (default: `~/.config/kognic/config.json`)
 
 When `--env` is not provided, the environment is automatically resolved by matching the request URL's hostname against the `host` field of each environment in the config file.
 

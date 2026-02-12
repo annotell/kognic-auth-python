@@ -26,9 +26,9 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Path to JSON credentials file. If not provided, credentials are read from environment variables.",
     )
     token_parser.add_argument(
-        "--config",
+        "--env-config-file-path",
         default=DEFAULT_CONFIG_PATH,
-        help=f"Config file path (default: {DEFAULT_CONFIG_PATH})",
+        help=f"Environment config file path (default: {DEFAULT_CONFIG_PATH})",
     )
     token_parser.add_argument(
         "--env",
@@ -43,7 +43,7 @@ def run(parsed: argparse.Namespace) -> int:
         credentials = parsed.credentials
 
         if parsed.env_name:
-            config = load_kognic_env_config(parsed.config)
+            config = load_kognic_env_config(parsed.env_config_file_path)
             if parsed.env_name not in config.environments:
                 print(f"Error: Unknown environment: {parsed.env_name}", file=sys.stderr)
                 return 1

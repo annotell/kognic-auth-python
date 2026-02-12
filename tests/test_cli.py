@@ -244,8 +244,10 @@ class CallParserTest(unittest.TestCase):
 
     def test_call_with_config(self):
         parser = create_parser()
-        args = parser.parse_args(["call", "https://app.kognic.com/v1/projects", "--config", "/custom/config.json"])
-        self.assertEqual(args.config, "/custom/config.json")
+        args = parser.parse_args(
+            ["call", "https://app.kognic.com/v1/projects", "--env-config-file-path", "/custom/config.json"]
+        )
+        self.assertEqual(args.env_config_file_path, "/custom/config.json")
 
 
 class CallApiTest(unittest.TestCase):
@@ -255,7 +257,7 @@ class CallApiTest(unittest.TestCase):
         url="https://app.kognic.com/v1/projects",
         data=None,
         headers=None,
-        config="/nonexistent/config.json",
+        env_config_file_path="/nonexistent/config.json",
         env_name=None,
     ):
         parser = create_parser()
@@ -267,7 +269,7 @@ class CallApiTest(unittest.TestCase):
         if headers:
             for h in headers:
                 args.extend(["-H", h])
-        args.extend(["--config", config])
+        args.extend(["--env-config-file-path", env_config_file_path])
         if env_name:
             args.extend(["--env", env_name])
         return parser.parse_args(args)
