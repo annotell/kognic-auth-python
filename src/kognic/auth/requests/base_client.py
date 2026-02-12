@@ -1,6 +1,7 @@
 """Base API client V2 using requests/OAuth2 session."""
 
 import logging
+import os
 from functools import lru_cache
 from threading import Lock
 from typing import Any, Callable, Optional, Tuple, Union
@@ -60,7 +61,7 @@ def _check_response(resp: requests.Response):
 
 
 def _resolve_auth_tuple(
-    auth: Optional[Union[str, tuple]],
+    auth: Optional[Union[str, os.PathLike, tuple]],
     client_id: Optional[str],
     client_secret: Optional[str],
 ) -> Optional[Tuple[str, str]]:
@@ -74,7 +75,7 @@ def _resolve_auth_tuple(
 
 def create_session(
     *,
-    auth: Optional[Union[str, tuple]] = None,
+    auth: Optional[Union[str, os.PathLike, tuple]] = None,
     auth_host: str = DEFAULT_HOST,
     auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     client_name: Optional[str] = None,
@@ -156,7 +157,7 @@ class BaseApiClient:
     def __init__(
         self,
         *,
-        auth: Optional[Union[str, tuple]] = None,
+        auth: Optional[Union[str, os.PathLike, tuple]] = None,
         auth_host: str = DEFAULT_HOST,
         auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
@@ -205,7 +206,7 @@ class BaseApiClient:
         cls,
         env: str,
         *,
-        env_config_path: str = "",
+        env_config_path: Union[str, os.PathLike] = "",
         **kwargs,
     ) -> "BaseApiClient":
         """Create a client from a named environment in the config file.

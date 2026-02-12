@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 from typing import Any, Callable, Optional, Union
 
 import httpx
@@ -55,7 +56,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
     def __init__(
         self,
         *,
-        auth: Optional[Union[str, tuple]] = None,
+        auth: Optional[Union[str, os.PathLike, tuple]] = None,
         auth_host: str = DEFAULT_HOST,
         auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
@@ -125,7 +126,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         cls,
         env: str,
         *,
-        env_config_path: str = "",
+        env_config_path: Union[str, os.PathLike] = "",
         **kwargs,
     ) -> "BaseAsyncApiClient":
         """Create a client from a named environment in the config file.

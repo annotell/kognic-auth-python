@@ -22,7 +22,7 @@ class ApiCredentials:
     issuer: str
 
 
-def parse_credentials(path: Union[str, dict]):
+def parse_credentials(path: Union[str, os.PathLike, dict]):
     if isinstance(path, dict):
         credentials = path
     else:
@@ -48,6 +48,8 @@ def parse_credentials(path: Union[str, dict]):
 
 
 def get_credentials(auth):
+    if isinstance(auth, os.PathLike):
+        return parse_credentials(auth)
     if isinstance(auth, str):
         if auth.endswith(".json"):
             return parse_credentials(auth)
