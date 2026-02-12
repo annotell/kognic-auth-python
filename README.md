@@ -92,10 +92,10 @@ kognic-auth get-access-token
 kognic-auth get-access-token --credentials ~/.config/kognic/credentials.json
 
 # Using a named context
-kognic-auth get-access-token --context staging
+kognic-auth get-access-token --context demo
 
 # Using a context but overriding the server
-kognic-auth get-access-token --context staging --server https://custom.server
+kognic-auth get-access-token --context demo --server https://custom.server
 ```
 
 ### call
