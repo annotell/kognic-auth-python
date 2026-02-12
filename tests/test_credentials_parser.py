@@ -3,6 +3,7 @@
 import json
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from kognic.auth.credentials_parser import (
@@ -44,7 +45,7 @@ class TestParseCredentials(unittest.TestCase):
             self.assertEqual(creds.client_id, "test_id")
             self.assertEqual(creds.client_secret, "test_secret")
         finally:
-            os.unlink(path)
+            Path(path).unlink()
 
     def test_parse_file_not_found(self):
         with self.assertRaises(FileNotFoundError):
@@ -69,7 +70,7 @@ class TestGetCredentials(unittest.TestCase):
             creds = get_credentials(path)
             self.assertEqual(creds.client_id, "test_id")
         finally:
-            os.unlink(path)
+            Path(path).unlink()
 
     def test_non_json_file_raises(self):
         with self.assertRaises(ValueError) as ctx:
@@ -124,7 +125,7 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
                 self.assertEqual(client_id, "test_id")
                 self.assertEqual(client_secret, "test_secret")
         finally:
-            os.unlink(path)
+            Path(path).unlink()
 
     @patch.dict(
         os.environ,
@@ -169,7 +170,7 @@ class TestResolveCredentials(unittest.TestCase):
             self.assertEqual(client_id, "test_id")
             self.assertEqual(client_secret, "test_secret")
         finally:
-            os.unlink(path)
+            Path(path).unlink()
 
     @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id", "KOGNIC_CLIENT_SECRET": "env_secret"}, clear=True)
     def test_falls_back_to_env(self):
