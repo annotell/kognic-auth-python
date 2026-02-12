@@ -57,7 +57,7 @@ class LoadConfigTest(unittest.TestCase):
         Path(f.name).unlink()
 
     def test_empty_contexts(self):
-        data = {"contexts": {}}
+        data = {"environments": {}}
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(data, f)
             f.flush()
