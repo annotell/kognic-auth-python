@@ -29,12 +29,14 @@ sess = RequestsAuthSession()
 sess.get("https://api.app.kognic.com")
 ```
 
-## CLI
+## CLI (Experimental)
 
 The package provides a command-line interface for generating access tokens and making authenticated API calls.
 This is great for LLM use cases, the `kognic-auth call` is a lightweight curl, that hides any complexity of authentication and context management,
 so you can just focus on the API call you want to make. This also avoids tokens being leaked to the shell history,
 as you can use named contexts and config files to manage your credentials.
+
+The interface is currently marked experimental, and breaking changes may be made without a major version bump. Feedback is welcome to help stabilize the design.
 
 ### Configuration file
 
