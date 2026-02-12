@@ -48,12 +48,11 @@ def parse_credentials(path: Union[str, os.PathLike, dict]):
 
 
 def get_credentials(auth):
-    if isinstance(auth, os.PathLike):
+    if isinstance(auth, (str, os.PathLike)):
+        path = str(auth)
+        if not path.endswith(".json"):
+            raise ValueError("Bad auth credentials file, must be json")
         return parse_credentials(auth)
-    if isinstance(auth, str):
-        if auth.endswith(".json"):
-            return parse_credentials(auth)
-        raise ValueError("Bad auth credentials file, must be json")
     elif isinstance(auth, ApiCredentials):
         return auth
     else:
