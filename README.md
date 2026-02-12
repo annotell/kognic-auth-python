@@ -49,7 +49,7 @@ The CLI can be configured with a JSON file at `~/.config/kognic/config.json`. Th
       "auth_server": "https://auth.app.kognic.com",
       "credentials": "~/.config/kognic/credentials-prod.json"
     },
-    "staging": {
+    "demo": {
       "host": "demo.kognic.com",
       "auth_server": "https://auth.demo.kognic.com",
       "credentials": "~/.config/kognic/credentials-demo.json"
@@ -101,7 +101,7 @@ kognic-auth get-access-token --context staging --server https://custom.server
 Make an authenticated HTTP request to a Kognic API.
 
 ```bash
-kognic-auth call URL [-X METHOD] [-d DATA] [-H HEADER] [--context NAME] [--config FILE]
+kognic-auth call URL [-X METHOD] [-d DATA] [-H HEADER] [--format FORMAT] [--context NAME] [--config FILE]
 ```
 
 **Options:**
@@ -109,6 +109,7 @@ kognic-auth call URL [-X METHOD] [-d DATA] [-H HEADER] [--context NAME] [--confi
 - `-X`, `--request` - HTTP method (default: `GET`)
 - `-d`, `--data` - Request body (JSON string)
 - `-H`, `--header` - Header in `Key: Value` format (repeatable)
+- `--format` - Output format (default: `json`). See [Output formats](#output-formats) below.
 - `--context` - Force a specific context (skip URL-based matching)
 - `--config` - Config file path (default: `~/.config/kognic/config.json`)
 
@@ -120,13 +121,41 @@ When `--context` is not provided, the context is automatically resolved by match
 kognic-auth call https://app.kognic.com/v1/projects
 
 # Explicit context
-kognic-auth call https://staging.kognic.com/v1/projects --context staging
+kognic-auth call https://demo.kognic.com/v1/projects --context demo
 
 # POST with JSON body
 kognic-auth call https://app.kognic.com/v1/projects -X POST -d '{"name": "test"}'
 
 # Custom headers
 kognic-auth call https://app.kognic.com/v1/projects -H "Accept: application/json"
+```
+
+#### Output formats
+
+The `--format` option controls how JSON responses are printed. For `jsonl`, `csv`, `tsv`, and `table`, the command automatically extracts the list from responses that are either a top-level JSON array or a JSON object with a single key holding an array (e.g. `{"data": [...]}`). If the response doesn't match this shape, it falls back to pretty-printed JSON.
+
+| Format  | Description |
+|---------|-------------|
+| `json`  | Pretty-printed JSON (default) |
+| `jsonl` | One JSON object per line ([JSON Lines](https://jsonlines.org/)) |
+| `csv`   | Comma-separated values with a header row |
+| `tsv`   | Tab-separated values with a header row |
+| `table` | Markdown table with aligned columns |
+
+Nested values (dicts and lists) are JSON-serialized in `csv`, `tsv`, and `table` output.
+
+```bash
+# One JSON object per line, useful for piping to jq or grep
+kognic-auth call https://app.kognic.com/v1/projects --format=jsonl
+
+# CSV output
+kognic-auth call https://app.kognic.com/v1/projects --format=csv
+
+# TSV output, easy to paste into spreadsheets
+kognic-auth call https://app.kognic.com/v1/projects --format=tsv
+
+# Markdown table
+kognic-auth call https://app.kognic.com/v1/projects --format=table
 ```
 
 **Exit codes:**

@@ -21,9 +21,9 @@ class LoadConfigTest(unittest.TestCase):
                     "auth_server": "https://auth.app.kognic.com",
                     "credentials": "~/creds.json",
                 },
-                "staging": {
-                    "host": "staging.kognic.com",
-                    "auth_server": "https://auth.staging.kognic.com",
+                "demo": {
+                    "host": "demo.kognic.com",
+                    "auth_server": "https://auth.demo.kognic.com",
                 },
             },
             "default_context": "production",
@@ -45,8 +45,8 @@ class LoadConfigTest(unittest.TestCase):
         self.assertTrue(prod.credentials.endswith("creds.json"))
         self.assertNotIn("~", prod.credentials)
 
-        staging = config.contexts["staging"]
-        self.assertIsNone(staging.credentials)
+        demo = config.contexts["demo"]
+        self.assertIsNone(demo.credentials)
 
     def test_invalid_json_raises(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -78,19 +78,19 @@ class ResolveContextTest(unittest.TestCase):
                     auth_server="https://auth.app.kognic.com",
                     credentials="/path/to/prod-creds.json",
                 ),
-                "staging": Context(
-                    name="staging",
-                    host="staging.kognic.com",
-                    auth_server="https://auth.staging.kognic.com",
-                    credentials="/path/to/staging-creds.json",
+                "demo": Context(
+                    name="demo",
+                    host="demo.kognic.com",
+                    auth_server="https://auth.demo.kognic.com",
+                    credentials="/path/to/demo-creds.json",
                 ),
             },
             default_context="production",
         )
 
     def test_explicit_context(self):
-        ctx = resolve_context(self.config, "https://anything.com/v1/foo", "staging")
-        self.assertEqual(ctx.name, "staging")
+        ctx = resolve_context(self.config, "https://anything.com/v1/foo", "demo")
+        self.assertEqual(ctx.name, "demo")
 
     def test_explicit_context_unknown_raises(self):
         with self.assertRaises(ValueError) as cm:
@@ -105,13 +105,13 @@ class ResolveContextTest(unittest.TestCase):
         ctx = resolve_context(self.config, "https://api.app.kognic.com/v1/projects")
         self.assertEqual(ctx.name, "production")
 
-    def test_staging_exact_match(self):
-        ctx = resolve_context(self.config, "https://staging.kognic.com/v1/projects")
-        self.assertEqual(ctx.name, "staging")
+    def test_demo_exact_match(self):
+        ctx = resolve_context(self.config, "https://demo.kognic.com/v1/projects")
+        self.assertEqual(ctx.name, "demo")
 
-    def test_staging_subdomain_match(self):
-        ctx = resolve_context(self.config, "https://api.staging.kognic.com/v1/projects")
-        self.assertEqual(ctx.name, "staging")
+    def test_demo_subdomain_match(self):
+        ctx = resolve_context(self.config, "https://api.demo.kognic.com/v1/projects")
+        self.assertEqual(ctx.name, "demo")
 
     def test_default_context_fallback(self):
         ctx = resolve_context(self.config, "https://unknown.example.com/v1/foo")
@@ -127,10 +127,10 @@ class ResolveContextTest(unittest.TestCase):
     def test_no_default_no_match_falls_back_to_default_auth(self):
         config = Config(
             contexts={
-                "staging": Context(
-                    name="staging",
-                    host="staging.kognic.com",
-                    auth_server="https://auth.staging.kognic.com",
+                "demo": Context(
+                    name="demo",
+                    host="demo.kognic.com",
+                    auth_server="https://auth.demo.kognic.com",
                 ),
             },
             default_context=None,
