@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 from kognic.auth import DEFAULT_HOST
 
-DEFAULT_CONFIG_PATH = str(Path("~") / ".config" / "kognic" / "config.json")
+DEFAULT_ENV_CONFIG_FILE_PATH = str(Path("~") / ".config" / "kognic" / "config.json")
 
 
 @dataclass
@@ -23,7 +23,7 @@ class KognicEnvConfig:
     default_environment: Optional[str] = None
 
 
-def load_kognic_env_config(path: str = DEFAULT_CONFIG_PATH) -> KognicEnvConfig:
+def load_kognic_env_config(path: str = DEFAULT_ENV_CONFIG_FILE_PATH) -> KognicEnvConfig:
     """Load config from JSON file. Returns empty Config if file doesn't exist."""
     expanded = Path(path).expanduser()
     if not expanded.exists():

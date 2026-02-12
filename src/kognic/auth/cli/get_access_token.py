@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from kognic.auth import DEFAULT_HOST
-from kognic.auth.env_config import DEFAULT_CONFIG_PATH, load_kognic_env_config
+from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.requests.auth_session import RequestsAuthSession
 
 COMMAND = "get-access-token"
@@ -27,8 +27,8 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     token_parser.add_argument(
         "--env-config-file-path",
-        default=DEFAULT_CONFIG_PATH,
-        help=f"Environment config file path (default: {DEFAULT_CONFIG_PATH})",
+        default=DEFAULT_ENV_CONFIG_FILE_PATH,
+        help=f"Environment config file path (default: {DEFAULT_ENV_CONFIG_FILE_PATH})",
     )
     token_parser.add_argument(
         "--env",

@@ -13,7 +13,7 @@ from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import handle_sunset
 from kognic.auth._user_agent import get_user_agent
 from kognic.auth.credentials_parser import resolve_credentials
-from kognic.auth.env_config import DEFAULT_CONFIG_PATH, load_kognic_env_config
+from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.serde import serialize_body
 
@@ -219,7 +219,7 @@ class BaseApiClient:
             Configured BaseApiClient instance.
         """
 
-        config_file_path = env_config_path or DEFAULT_CONFIG_PATH
+        config_file_path = env_config_path or DEFAULT_ENV_CONFIG_FILE_PATH
         cfg = load_kognic_env_config(config_file_path)
         if env not in cfg.environments:
             raise ValueError(f"Unknown environment: {env} not found in config at {config_file_path}")

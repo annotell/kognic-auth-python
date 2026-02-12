@@ -7,7 +7,7 @@ import json
 import sys
 from typing import Any
 
-from kognic.auth.env_config import DEFAULT_CONFIG_PATH, load_kognic_env_config, resolve_environment
+from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config, resolve_environment
 from kognic.auth.requests.auth_session import RequestsAuthSession
 
 COMMAND = "call"
@@ -38,8 +38,8 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     call_parser.add_argument(
         "--env-config-file-path",
-        default=DEFAULT_CONFIG_PATH,
-        help=f"Environment config file path (default: {DEFAULT_CONFIG_PATH})",
+        default=DEFAULT_ENV_CONFIG_FILE_PATH,
+        help=f"Environment config file path (default: {DEFAULT_ENV_CONFIG_FILE_PATH})",
     )
     call_parser.add_argument("--env", dest="env_name", help="Force a specific environment (skip URL-based matching)")
     call_parser.add_argument(
