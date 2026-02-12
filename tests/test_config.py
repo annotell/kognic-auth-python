@@ -15,7 +15,7 @@ class LoadConfigTest(unittest.TestCase):
 
     def test_valid_config(self):
         data = {
-            "contexts": {
+            "environments": {
                 "production": {
                     "host": "app.kognic.com",
                     "auth_server": "https://auth.app.kognic.com",
@@ -26,7 +26,7 @@ class LoadConfigTest(unittest.TestCase):
                     "auth_server": "https://auth.demo.kognic.com",
                 },
             },
-            "default_context": "production",
+            "default_environment": "production",
         }
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(data, f)

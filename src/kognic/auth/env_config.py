@@ -32,7 +32,7 @@ def load_kognic_env_config(path: str = DEFAULT_ENV_CONFIG_FILE_PATH) -> KognicEn
     data = json.loads(expanded.read_text())
 
     environments = {}
-    for name, env_data in data.get("contexts", {}).items():
+    for name, env_data in data.get("environments", {}).items():
         credentials = env_data.get("credentials")
         if credentials:
             credentials = str(Path(credentials).expanduser())
@@ -45,7 +45,7 @@ def load_kognic_env_config(path: str = DEFAULT_ENV_CONFIG_FILE_PATH) -> KognicEn
 
     return KognicEnvConfig(
         environments=environments,
-        default_environment=data.get("default_context"),
+        default_environment=data.get("default_environment"),
     )
 
 

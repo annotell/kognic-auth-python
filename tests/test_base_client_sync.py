@@ -109,7 +109,7 @@ class TestBaseApiClientFromEnv(unittest.TestCase):
 
         config_path = self._write_config(
             {
-                "contexts": {
+                "environments": {
                     "demo": {
                         "host": "demo.kognic.com",
                         "auth_server": "https://auth.demo.kognic.com",
@@ -135,7 +135,7 @@ class TestBaseApiClientFromEnv(unittest.TestCase):
 
         config_path = self._write_config(
             {
-                "contexts": {
+                "environments": {
                     "demo": {
                         "host": "demo.kognic.com",
                         "auth_server": "https://auth.demo.kognic.com",
@@ -154,7 +154,7 @@ class TestBaseApiClientFromEnv(unittest.TestCase):
     def test_unknown_env_raises(self):
         from kognic.auth.requests.base_client import BaseApiClient
 
-        config_path = self._write_config({"contexts": {}})
+        config_path = self._write_config({"environments": {}})
         try:
             with self.assertRaises(ValueError) as cm:
                 BaseApiClient.from_env("nonexistent", env_config_path=config_path)
@@ -175,7 +175,7 @@ class TestBaseApiClientFromEnv(unittest.TestCase):
 
         config_path = self._write_config(
             {
-                "contexts": {
+                "environments": {
                     "demo": {
                         "host": "demo.kognic.com",
                         "auth_server": "https://auth.demo.kognic.com",

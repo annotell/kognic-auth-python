@@ -49,7 +49,7 @@ class TestBaseAsyncApiClientFromEnv(unittest.TestCase):
 
         config_path = self._write_config(
             {
-                "contexts": {
+                "environments": {
                     "demo": {
                         "host": "demo.kognic.com",
                         "auth_server": "https://auth.demo.kognic.com",
@@ -71,7 +71,7 @@ class TestBaseAsyncApiClientFromEnv(unittest.TestCase):
     def test_unknown_env_raises(self):
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
-        config_path = self._write_config({"contexts": {}})
+        config_path = self._write_config({"environments": {}})
         try:
             with self.assertRaises(ValueError) as cm:
                 BaseAsyncApiClient.from_env("nonexistent", env_config_path=config_path)

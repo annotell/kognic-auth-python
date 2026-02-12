@@ -44,8 +44,8 @@ The CLI can be configured with a JSON file at `~/.config/kognic/config.json`. Th
 
 ```json
 {
-  "default_context": "production",
-  "contexts": {
+  "default_environment": "production",
+  "environments": {
     "production": {
       "host": "app.kognic.com",
       "auth_server": "https://auth.app.kognic.com",
@@ -65,7 +65,7 @@ Each environment has the following fields:
 - `auth_server` - The OAuth server URL used to fetch tokens.
 - `credentials` *(optional)* - Path to a JSON credentials file. Tilde (`~`) is expanded. If omitted, credentials are read from environment variables.
 
-`default_context` specifies which environment to use as a fallback when no `--env` flag is given and no URL match is found.
+`default_environment` specifies which environment to use as a fallback when no `--env` flag is given and no URL match is found.
 
 ### get-access-token
 
