@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from types import ModuleType
 
@@ -22,7 +23,15 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _configure_logging() -> None:
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    logging.getLogger("kognic.auth").addHandler(handler)
+    logging.getLogger("kognic.auth").setLevel(logging.WARNING)
+
+
 def main(args: list[str] | None = None) -> int:
+    _configure_logging()
     parser = create_parser()
     parsed = parser.parse_args(args)
 
