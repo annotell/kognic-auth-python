@@ -1,6 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Union
 
 REQUIRED_CREDENTIALS_FILE_KEYS = [
@@ -26,8 +27,7 @@ def parse_credentials(path: Union[str, dict]):
         credentials = path
     else:
         try:
-            with open(path) as f:
-                credentials = json.load(f)
+            credentials = json.loads(Path(path).read_text())
         except FileNotFoundError:
             raise FileNotFoundError(f"Could not find Api Credentials file at {path}") from None
 
