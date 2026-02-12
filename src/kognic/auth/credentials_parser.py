@@ -51,7 +51,7 @@ def get_credentials(auth):
     if isinstance(auth, (str, os.PathLike)):
         path = str(auth)
         if not path.endswith(".json"):
-            raise ValueError("Bad auth credentials file, must be json")
+            raise ValueError(f"Bad auth credentials file, must be json: {path}")
         return parse_credentials(auth)
     elif isinstance(auth, ApiCredentials):
         return auth
