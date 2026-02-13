@@ -156,6 +156,9 @@ def _print_response(response: Any, *, output_format: str = "json") -> None:
 
 def run(parsed: argparse.Namespace) -> int:
     try:
+        headers = _parse_headers(parsed.headers) or {}
+        data = _parse_body(parsed.data, headers)
+
         config = load_kognic_env_config(parsed.env_config_file_path)
         env = resolve_environment(config, parsed.url, parsed.env_name)
 
@@ -163,9 +166,6 @@ def run(parsed: argparse.Namespace) -> int:
             auth=env.credentials,
             auth_host=env.auth_server,
         )
-
-        headers = _parse_headers(parsed.headers) or {}
-        data = _parse_body(parsed.data, headers)
 
         response = session.request(
             method=parsed.method.upper(),

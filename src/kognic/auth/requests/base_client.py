@@ -1,10 +1,15 @@
 """Base API client V2 using requests/OAuth2 session."""
 
+from __future__ import annotations
+
 import logging
 import os
 from functools import lru_cache
 from threading import Lock
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from typing import Self
 
 import requests
 from requests import Session
@@ -208,7 +213,7 @@ class BaseApiClient:
         *,
         env_config_path: Union[str, os.PathLike] = "",
         **kwargs,
-    ) -> "BaseApiClient":
+    ) -> Self:
         """Create a client from a named environment in the config file.
 
         Args:

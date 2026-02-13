@@ -1,9 +1,14 @@
 """Base async API client V2 using httpx/OAuth2 client."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
-from typing import Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+
+if TYPE_CHECKING:
+    from typing import Self
 
 import httpx
 
@@ -121,6 +126,14 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
 
         self._oauth_client.request = request
 
+    async def __aenter__(self) -> Self:
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit."""
+        await self.close()
+
     @classmethod
     def from_env(
         cls,
@@ -128,7 +141,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         *,
         env_config_path: Union[str, os.PathLike] = "",
         **kwargs,
-    ) -> "BaseAsyncApiClient":
+    ) -> Self:
         """Create a client from a named environment in the config file.
 
         Args:
@@ -147,11 +160,3 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         kwargs.setdefault("auth", resolved.credentials)
         kwargs["auth_host"] = resolved.auth_server
         return cls(**kwargs)
-
-    async def __aenter__(self) -> "BaseAsyncApiClient":
-        """Async context manager entry."""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Async context manager exit."""
-        await self.close()
