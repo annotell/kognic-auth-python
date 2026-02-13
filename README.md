@@ -98,7 +98,7 @@ kognic-auth get-access-token --env demo
 kognic-auth get-access-token --env demo --server https://custom.server
 ```
 
-### call
+### kog
 
 Make an authenticated HTTP request to a Kognic API.
 
