@@ -32,7 +32,7 @@ sess.get("https://api.app.kognic.com")
 ## CLI (Experimental)
 
 The package provides a command-line interface for generating access tokens and making authenticated API calls.
-This is great for LLM use cases, the `kognic-auth call` is a lightweight curl, that hides any complexity of authentication and context management,
+This is great for LLM use cases, the `kog get` is a lightweight curl, that hides any complexity of authentication and context management,
 so you can just focus on the API call you want to make. This also avoids tokens being leaked to the shell history,
 as you can use named environments and config files to manage your credentials.
 
@@ -103,12 +103,12 @@ kognic-auth get-access-token --env demo --server https://custom.server
 Make an authenticated HTTP request to a Kognic API.
 
 ```bash
-kognic-auth call URL [-X METHOD] [-d DATA] [-H HEADER] [--format FORMAT] [--env NAME] [--env-config-file-path FILE]
+kog <METHOD> URL [-d DATA] [-H HEADER] [--format FORMAT] [--env NAME] [--env-config-file-path FILE]
 ```
 
 **Options:**
+- `METHOD` - Method, get, post, put, delete, patch, etc
 - `URL` - Full URL to call
-- `-X`, `--request` - HTTP method (default: `GET`)
 - `-d`, `--data` - Request body (JSON string)
 - `-H`, `--header` - Header in `Key: Value` format (repeatable)
 - `--format` - Output format (default: `json`). See [Output formats](#output-formats) below.
@@ -120,16 +120,16 @@ When `--env` is not provided, the environment is automatically resolved by match
 **Examples:**
 ```bash
 # GET request (default method), environment auto-resolved from URL hostname
-kognic-auth call https://app.kognic.com/v1/projects
+kog get https://app.kognic.com/v1/projects
 
 # Explicit environment
-kognic-auth call https://demo.kognic.com/v1/projects --env demo
+kog get https://demo.kognic.com/v1/projects --env demo
 
 # POST with JSON body
-kognic-auth call https://app.kognic.com/v1/projects -X POST -d '{"name": "test"}'
+kog post https://app.kognic.com/v1/projects -d '{"name": "test"}'
 
 # Custom headers
-kognic-auth call https://app.kognic.com/v1/projects -H "Accept: application/json"
+kog get https://app.kognic.com/v1/projects -H "Accept: application/json"
 ```
 
 #### Output formats
@@ -148,16 +148,16 @@ Nested values (dicts and lists) are JSON-serialized in `csv`, `tsv`, and `table`
 
 ```bash
 # One JSON object per line, useful for piping to jq or grep
-kognic-auth call https://app.kognic.com/v1/projects --format=jsonl
+kog get https://app.kognic.com/v1/projects --format=jsonl
 
 # CSV output
-kognic-auth call https://app.kognic.com/v1/projects --format=csv
+kog get https://app.kognic.com/v1/projects --format=csv
 
 # TSV output, easy to paste into spreadsheets
-kognic-auth call https://app.kognic.com/v1/projects --format=tsv
+kog get https://app.kognic.com/v1/projects --format=tsv
 
 # Markdown table
-kognic-auth call https://app.kognic.com/v1/projects --format=table
+kog get https://app.kognic.com/v1/projects --format=table
 ```
 
 **Exit codes:**
