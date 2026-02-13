@@ -31,6 +31,7 @@ homepage = "https://github.com/annotell/kognic-auth-python"
 
 [project.scripts]
 kognic-auth = "kognic.auth.cli:main"
+kog = "kognic.auth.cli.api_request:main"
 
 [tool.setuptools_scm]
 write_to = "src/kognic/auth/_version.py"
@@ -50,12 +51,13 @@ full = [
 dev = [
     "httpx>=0.20,<1",
     "requests>=2.20,<3",
+    "pydantic>=2",
     "pytest",
 ]
 
 [tool.ruff]
 line-length = 120
-target-version = "py38"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "W", "I001", "PTH"]

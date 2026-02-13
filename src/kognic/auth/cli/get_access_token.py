@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from kognic.auth import DEFAULT_HOST
-from kognic.auth.config import DEFAULT_CONFIG_PATH, load_config
+from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.requests.auth_session import RequestsAuthSession
 
 COMMAND = "get-access-token"
@@ -26,14 +26,14 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Path to JSON credentials file. If not provided, credentials are read from environment variables.",
     )
     token_parser.add_argument(
-        "--config",
-        default=DEFAULT_CONFIG_PATH,
-        help=f"Config file path (default: {DEFAULT_CONFIG_PATH})",
+        "--env-config-file-path",
+        default=DEFAULT_ENV_CONFIG_FILE_PATH,
+        help=f"Environment config file path (default: {DEFAULT_ENV_CONFIG_FILE_PATH})",
     )
     token_parser.add_argument(
-        "--context",
-        dest="context_name",
-        help="Use a specific context from the config file",
+        "--env",
+        dest="env_name",
+        help="Use a specific environment from the config file",
     )
 
 
@@ -42,12 +42,12 @@ def run(parsed: argparse.Namespace) -> int:
         host = parsed.server
         credentials = parsed.credentials
 
-        if parsed.context_name:
-            config = load_config(parsed.config)
-            if parsed.context_name not in config.contexts:
-                print(f"Error: Unknown context: {parsed.context_name}", file=sys.stderr)
+        if parsed.env_name:
+            config = load_kognic_env_config(parsed.env_config_file_path)
+            if parsed.env_name not in config.environments:
+                print(f"Error: Unknown environment: {parsed.env_name}", file=sys.stderr)
                 return 1
-            ctx = config.contexts[parsed.context_name]
+            ctx = config.environments[parsed.env_name]
             if host is None:
                 host = ctx.auth_server
             if credentials is None:

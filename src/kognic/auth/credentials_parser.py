@@ -22,7 +22,7 @@ class ApiCredentials:
     issuer: str
 
 
-def parse_credentials(path: Union[str, dict]):
+def parse_credentials(path: Union[str, os.PathLike, dict]):
     if isinstance(path, dict):
         credentials = path
     else:
@@ -48,10 +48,11 @@ def parse_credentials(path: Union[str, dict]):
 
 
 def get_credentials(auth):
-    if isinstance(auth, str):
-        if auth.endswith(".json"):
-            return parse_credentials(auth)
-        raise ValueError("Bad auth credentials file, must be json")
+    if isinstance(auth, (str, os.PathLike)):
+        path = str(auth)
+        if not path.endswith(".json"):
+            raise ValueError(f"Bad auth credentials file, must be json: {path}")
+        return parse_credentials(auth)
     elif isinstance(auth, ApiCredentials):
         return auth
     else:
@@ -66,18 +67,6 @@ def get_credentials_from_env():
 
     client_id = os.getenv("KOGNIC_CLIENT_ID")
     client_secret = os.getenv("KOGNIC_CLIENT_SECRET")
-
-    if client_id and client_secret:
-        return client_id, client_secret
-
-    # fallbacks
-    creds = os.getenv("ANNOTELL_CREDENTIALS")
-    if creds:
-        client_credentials = parse_credentials(creds)
-        return client_credentials.client_id, client_credentials.client_secret
-
-    client_id = os.getenv("ANNOTELL_CLIENT_ID")
-    client_secret = os.getenv("ANNOTELL_CLIENT_SECRET")
 
     return client_id, client_secret
 
