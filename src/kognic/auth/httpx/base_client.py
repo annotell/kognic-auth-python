@@ -133,7 +133,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
 
         Args:
             env: Environment name to look up in the config file.
-            env_config_path: Path to config file. Defaults to ~/.config/kognic/config.json.
+            env_config_path: Path to config file. Defaults to ~/.config/kognic/environments.json.
             **kwargs: Additional arguments passed to the constructor (e.g. client_name, json_serializer).
 
         Returns:

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from kognic.auth import DEFAULT_HOST
 
-DEFAULT_ENV_CONFIG_FILE_PATH = str(Path("~") / ".config" / "kognic" / "config.json")
+DEFAULT_ENV_CONFIG_FILE_PATH = str(Path("~") / ".config" / "kognic" / "environments.json")
 
 
 @dataclass

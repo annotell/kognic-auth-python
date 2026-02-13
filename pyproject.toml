@@ -31,6 +31,7 @@ homepage = "https://github.com/annotell/kognic-auth-python"
 
 [project.scripts]
 kognic-auth = "kognic.auth.cli:main"
+kog = "kognic.auth.cli.api_request:main"
 
 [tool.setuptools_scm]
 write_to = "src/kognic/auth/_version.py"

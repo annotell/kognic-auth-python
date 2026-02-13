@@ -8,47 +8,41 @@ import sys
 from typing import Any
 
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config, resolve_environment
-from kognic.auth.requests.auth_session import RequestsAuthSession
+from kognic.auth.requests.base_client import create_session
 
-COMMAND = "call"
+METHODS = ["get", "post", "put", "patch", "delete", "head", "options"]
 
 
-def register_parser(subparsers: argparse._SubParsersAction) -> None:
-    call_parser = subparsers.add_parser(
-        COMMAND,
-        help="Make an authenticated HTTP request to a Kognic API",
+def _create_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="kog",
+        description="Make authenticated HTTP requests to Kognic APIs",
     )
-    call_parser.add_argument("url", metavar="URL", help="Full URL to call")
-    call_parser.add_argument(
-        "-X",
-        "--request",
-        dest="method",
-        default="GET",
-        metavar="METHOD",
-        help="HTTP method (default: GET)",
-    )
-    call_parser.add_argument("-d", "--data", help="Request body (JSON string)")
-    call_parser.add_argument(
+    parser.add_argument("method", metavar="METHOD", choices=METHODS, help=f"HTTP method ({', '.join(METHODS)})")
+    parser.add_argument("url", metavar="URL", help="Full URL to call")
+    parser.add_argument("-d", "--data", help="Request body (JSON string)")
+    parser.add_argument(
         "-H",
         "--header",
         action="append",
         dest="headers",
-        metavar="HDR",
+        metavar="HEADER",
         help="Header in 'Key: Value' format (repeatable)",
     )
-    call_parser.add_argument(
+    parser.add_argument(
         "--env-config-file-path",
         default=DEFAULT_ENV_CONFIG_FILE_PATH,
         help=f"Environment config file path (default: {DEFAULT_ENV_CONFIG_FILE_PATH})",
     )
-    call_parser.add_argument("--env", dest="env_name", help="Force a specific environment (skip URL-based matching)")
-    call_parser.add_argument(
+    parser.add_argument("--env", dest="env_name", help="Force a specific environment (skip URL-based matching)")
+    parser.add_argument(
         "--format",
         dest="output_format",
         choices=["json", "jsonl", "csv", "tsv", "table"],
         default="json",
         help="Output format: json (default), jsonl (one JSON object per line), csv, tsv, table (markdown)",
     )
+    return parser
 
 
 def _parse_headers(raw: list[str] | None) -> dict[str, str] | None:
@@ -165,15 +159,15 @@ def run(parsed: argparse.Namespace) -> int:
         config = load_kognic_env_config(parsed.env_config_file_path)
         env = resolve_environment(config, parsed.url, parsed.env_name)
 
-        session = RequestsAuthSession(
+        session = create_session(
             auth=env.credentials,
-            host=env.auth_server,
+            auth_host=env.auth_server,
         )
 
         headers = _parse_headers(parsed.headers) or {}
         data = _parse_body(parsed.data, headers)
 
-        response = session.session.request(
+        response = session.request(
             method=parsed.method.upper(),
             url=parsed.url,
             json=data if data is not None else None,
@@ -189,3 +183,12 @@ def run(parsed: argparse.Namespace) -> int:
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+
+def main(args: list[str] | None = None) -> None:
+    from kognic.auth.cli import _configure_logging
+
+    _configure_logging()
+    parser = _create_parser()
+    parsed = parser.parse_args(args)
+    sys.exit(run(parsed))

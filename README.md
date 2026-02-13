@@ -40,7 +40,7 @@ The interface is currently marked experimental, and breaking changes may be made
 
 ### Configuration file
 
-The CLI can be configured with a JSON file at `~/.config/kognic/config.json`. This lets you define named environments, each with its own host, auth server, and credentials.
+The CLI can be configured with a JSON file at `~/.config/kognic/environments.json`. This lets you define named environments, each with its own host, auth server, and credentials.
 
 ```json
 {
@@ -79,7 +79,7 @@ kognic-auth get-access-token [--server SERVER] [--credentials FILE] [--env NAME]
 - `--server` - Authentication server URL (default: `https://auth.app.kognic.com`)
 - `--credentials` - Path to JSON credentials file. If not provided, credentials are read from environment variables.
 - `--env` - Use a named environment from the config file.
-- `--env-config-file-path` - Environment config file path (default: `~/.config/kognic/config.json`)
+- `--env-config-file-path` - Environment config file path (default: `~/.config/kognic/environments.json`)
 
 When `--env` is provided, the auth server and credentials are resolved from the config file. Explicit `--server` or `--credentials` flags override the environment values.
 
@@ -113,7 +113,7 @@ kognic-auth call URL [-X METHOD] [-d DATA] [-H HEADER] [--format FORMAT] [--env 
 - `-H`, `--header` - Header in `Key: Value` format (repeatable)
 - `--format` - Output format (default: `json`). See [Output formats](#output-formats) below.
 - `--env` - Force a specific environment (skip URL-based matching)
-- `--env-config-file-path` - Environment config file path (default: `~/.config/kognic/config.json`)
+- `--env-config-file-path` - Environment config file path (default: `~/.config/kognic/environments.json`)
 
 When `--env` is not provided, the environment is automatically resolved by matching the request URL's hostname against the `host` field of each environment in the config file.
 
