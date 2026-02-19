@@ -8,10 +8,9 @@ import sys
 from typing import Any
 
 from kognic.auth.cli import _configure_logging
-from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config, resolve_environment
 from kognic.auth.internal.token_cache import make_cache
-from kognic.auth.requests.base_client import create_session
+from kognic.auth.requests.base_client import create_session, make_token_provider
 
 METHODS = ["get", "post", "put", "patch", "delete", "head", "options"]
 
@@ -166,14 +165,8 @@ def _print_response(response: Any, *, output_format: str = "json") -> None:
 
 
 def _create_authenticated_session(*, auth, auth_host, cache_mode: str = "auto"):
-    cache = make_cache(cache_mode)
-    client_id, client_secret = resolve_credentials(auth)
-    return create_session(
-        auth=(client_id, client_secret),
-        auth_host=auth_host,
-        initial_token=cache.load(auth_host, client_id) if (cache and client_id) else None,
-        on_token_updated=(lambda t: cache.save(auth_host, client_id, t)) if (cache and client_id) else None,
-    )
+    provider = make_token_provider(auth=auth, auth_host=auth_host, token_cache=make_cache(cache_mode))
+    return create_session(token_provider=provider)
 
 
 def run(parsed: argparse.Namespace) -> int:

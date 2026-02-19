@@ -139,6 +139,35 @@ def create_session(
     return session
 
 
+def make_token_provider(
+    *,
+    auth: Optional[Union[str, os.PathLike, tuple]] = None,
+    auth_host: str = DEFAULT_HOST,
+    auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+    token_cache: Optional[TokenCache] = None,
+) -> RequestsAuthSession:
+    """Create a RequestsAuthSession wired to an optional token cache.
+
+    Args:
+        auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
+        auth_host: Authentication server base URL
+        auth_token_endpoint: Relative path to token endpoint
+        token_cache: Token cache for cross-process persistence. When given, a valid cached token is
+            injected on startup and new tokens are saved automatically.
+
+    Returns:
+        Configured RequestsAuthSession
+    """
+    client_id, client_secret = resolve_credentials(auth)
+    return RequestsAuthSession(
+        auth=(client_id, client_secret),
+        host=auth_host,
+        token_endpoint=auth_token_endpoint,
+        initial_token=token_cache.load(auth_host, client_id) if (token_cache and client_id) else None,
+        on_token_updated=(lambda t: token_cache.save(auth_host, client_id, t)) if (token_cache and client_id) else None,
+    )
+
+
 _provider_pool: WeakValueDictionary[tuple, RequestsAuthSession] = WeakValueDictionary()
 _provider_pool_lock = threading.Lock()
 

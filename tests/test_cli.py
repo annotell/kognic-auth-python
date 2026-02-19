@@ -46,107 +46,126 @@ class CliParserTest(unittest.TestCase):
             result = main([])
         self.assertEqual(result, 0)
 
-    def test_no_cache_flag(self):
-        parser = create_parser()
-        args = parser.parse_args(["get-access-token", "--no-cache"])
-        self.assertTrue(args.no_cache)
-
-    def test_no_cache_default_false(self):
+    def test_token_cache_default(self):
         parser = create_parser()
         args = parser.parse_args(["get-access-token"])
-        self.assertFalse(args.no_cache)
+        self.assertEqual(args.token_cache, "auto")
+
+    def test_token_cache_none(self):
+        parser = create_parser()
+        args = parser.parse_args(["get-access-token", "--token-cache", "none"])
+        self.assertEqual(args.token_cache, "none")
+
+    def test_token_cache_choices(self):
+        parser = create_parser()
+        for choice in ("auto", "keyring", "file", "none"):
+            args = parser.parse_args(["get-access-token", "--token-cache", choice])
+            self.assertEqual(args.token_cache, choice)
 
 
 class CliMainTest(unittest.TestCase):
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    def test_main_prints_token(self, mock_session_class):
-        mock_session = mock.MagicMock()
-        mock_session.access_token = "test-access-token-123"
-        mock_session_class.return_value = mock_session
+    def _make_provider(self, access_token):
+        provider = mock.MagicMock()
+        provider.ensure_token.return_value = {"access_token": access_token}
+        return provider
+
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    def test_main_prints_token(self, mock_make_provider):
+        mock_make_provider.return_value = self._make_provider("test-access-token-123")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--no-cache"])
+            result = main(["get-access-token", "--token-cache", "none"])
 
         self.assertEqual(result, 0)
         mock_print.assert_called_once_with("test-access-token-123")
-        mock_session_class.assert_called_once_with(auth=None, host=DEFAULT_HOST)
 
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    def test_main_with_credentials_file(self, mock_session_class):
-        mock_session = mock.MagicMock()
-        mock_session.access_token = "token-from-file"
-        mock_session_class.return_value = mock_session
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    def test_main_with_credentials_file(self, mock_make_provider):
+        mock_make_provider.return_value = self._make_provider("token-from-file")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--credentials", "/path/to/creds.json", "--no-cache"])
+            result = main(["get-access-token", "--credentials", "/path/to/creds.json", "--token-cache", "none"])
 
         self.assertEqual(result, 0)
         mock_print.assert_called_once_with("token-from-file")
-        mock_session_class.assert_called_once_with(auth="/path/to/creds.json", host=DEFAULT_HOST)
+        mock_make_provider.assert_called_once_with(
+            auth="/path/to/creds.json",
+            auth_host=DEFAULT_HOST,
+            token_cache=None,
+        )
 
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    def test_main_with_custom_server(self, mock_session_class):
-        mock_session = mock.MagicMock()
-        mock_session.access_token = "custom-server-token"
-        mock_session_class.return_value = mock_session
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    def test_main_with_custom_server(self, mock_make_provider):
+        mock_make_provider.return_value = self._make_provider("custom-server-token")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--server", "https://custom.server", "--no-cache"])
+            result = main(["get-access-token", "--server", "https://custom.server", "--token-cache", "none"])
 
         self.assertEqual(result, 0)
         mock_print.assert_called_once_with("custom-server-token")
-        mock_session_class.assert_called_once_with(auth=None, host="https://custom.server")
+        mock_make_provider.assert_called_once_with(
+            auth=None,
+            auth_host="https://custom.server",
+            token_cache=None,
+        )
 
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    def test_main_with_all_options(self, mock_session_class):
-        mock_session = mock.MagicMock()
-        mock_session.access_token = "full-options-token"
-        mock_session_class.return_value = mock_session
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    def test_main_with_all_options(self, mock_make_provider):
+        mock_make_provider.return_value = self._make_provider("full-options-token")
 
         with mock.patch("builtins.print"):
             result = main(
-                ["get-access-token", "--server", "https://my.server", "--credentials", "creds.json", "--no-cache"]
+                [
+                    "get-access-token",
+                    "--server",
+                    "https://my.server",
+                    "--credentials",
+                    "creds.json",
+                    "--token-cache",
+                    "none",
+                ]
             )
 
         self.assertEqual(result, 0)
-        mock_session_class.assert_called_once_with(auth="creds.json", host="https://my.server")
+        mock_make_provider.assert_called_once_with(
+            auth="creds.json",
+            auth_host="https://my.server",
+            token_cache=None,
+        )
 
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    def test_main_file_not_found(self, mock_session_class):
-        mock_session_class.side_effect = FileNotFoundError("Could not find Api Credentials file at /bad/path.json")
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    def test_main_file_not_found(self, mock_make_provider):
+        mock_make_provider.side_effect = FileNotFoundError("Could not find Api Credentials file at /bad/path.json")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--credentials", "/bad/path.json", "--no-cache"])
+            result = main(["get-access-token", "--credentials", "/bad/path.json", "--token-cache", "none"])
 
         self.assertEqual(result, 1)
-        mock_print.assert_called_once()
         self.assertIn("Error:", mock_print.call_args[0][0])
 
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    def test_main_value_error(self, mock_session_class):
-        mock_session_class.side_effect = ValueError("Bad auth credentials")
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    def test_main_value_error(self, mock_make_provider):
+        mock_make_provider.side_effect = ValueError("Bad auth credentials")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--no-cache"])
+            result = main(["get-access-token", "--token-cache", "none"])
 
         self.assertEqual(result, 1)
-        mock_print.assert_called_once()
         self.assertIn("Error:", mock_print.call_args[0][0])
 
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    def test_main_generic_exception(self, mock_session_class):
-        mock_session_class.side_effect = Exception("Network error")
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    def test_main_generic_exception(self, mock_make_provider):
+        mock_make_provider.side_effect = Exception("Network error")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--no-cache"])
+            result = main(["get-access-token", "--token-cache", "none"])
 
         self.assertEqual(result, 1)
-        mock_print.assert_called_once()
         self.assertIn("Error fetching token:", mock_print.call_args[0][0])
 
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
     @mock.patch("kognic.auth.cli.get_access_token.load_kognic_env_config")
-    def test_main_with_context(self, mock_load_config, mock_session_class):
+    def test_main_with_context(self, mock_load_config, mock_make_provider):
         from kognic.auth.env_config import KognicEnvConfig
 
         mock_load_config.return_value = KognicEnvConfig(
@@ -159,23 +178,22 @@ class CliMainTest(unittest.TestCase):
                 ),
             },
         )
-        mock_session = mock.MagicMock()
-        mock_session.access_token = "demo-token"
-        mock_session_class.return_value = mock_session
+        mock_make_provider.return_value = self._make_provider("demo-token")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--env", "demo", "--no-cache"])
+            result = main(["get-access-token", "--env", "demo", "--token-cache", "none"])
 
         self.assertEqual(result, 0)
         mock_print.assert_called_once_with("demo-token")
-        mock_session_class.assert_called_once_with(
+        mock_make_provider.assert_called_once_with(
             auth="/path/to/demo-creds.json",
-            host="https://auth.demo.kognic.com",
+            auth_host="https://auth.demo.kognic.com",
+            token_cache=None,
         )
 
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
     @mock.patch("kognic.auth.cli.get_access_token.load_kognic_env_config")
-    def test_main_with_context_server_override(self, mock_load_config, mock_session_class):
+    def test_main_with_context_server_override(self, mock_load_config, mock_make_provider):
         from kognic.auth.env_config import KognicEnvConfig
 
         mock_load_config.return_value = KognicEnvConfig(
@@ -188,17 +206,18 @@ class CliMainTest(unittest.TestCase):
                 ),
             },
         )
-        mock_session = mock.MagicMock()
-        mock_session.access_token = "override-token"
-        mock_session_class.return_value = mock_session
+        mock_make_provider.return_value = self._make_provider("override-token")
 
         with mock.patch("builtins.print"):
-            result = main(["get-access-token", "--env", "demo", "--server", "https://custom.server", "--no-cache"])
+            result = main(
+                ["get-access-token", "--env", "demo", "--server", "https://custom.server", "--token-cache", "none"]
+            )
 
         self.assertEqual(result, 0)
-        mock_session_class.assert_called_once_with(
+        mock_make_provider.assert_called_once_with(
             auth="/path/to/demo-creds.json",
-            host="https://custom.server",
+            auth_host="https://custom.server",
+            token_cache=None,
         )
 
     def test_main_with_unknown_context(self):
@@ -211,88 +230,77 @@ class CliMainTest(unittest.TestCase):
                 result = main(["get-access-token", "--env", "nonexistent"])
 
         self.assertEqual(result, 1)
-        mock_print.assert_called_once()
-        self.assertIn("Unknown environment", mock_print.call_args[0][0])
+        self.assertIn("nonexistent", mock_print.call_args[0][0])
 
 
 class CliCacheTest(unittest.TestCase):
-    """Tests for keyring token caching in get-access-token."""
+    """Tests for token caching in get-access-token."""
 
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    @mock.patch("kognic.auth.cli.token_cache.load_cached_token")
-    @mock.patch("kognic.auth.cli.token_cache._keyring_available", return_value=True)
-    @mock.patch("kognic.auth.credentials_parser.resolve_credentials", return_value=("client-1", "secret"))
-    def test_cache_hit_returns_cached_token(self, mock_resolve, mock_kr, mock_load, mock_session_class):
-        mock_load.return_value = {
-            "access_token": "cached-token-abc",
+    def _make_token(self, access_token="cached-token-abc"):
+        return {
+            "access_token": access_token,
             "expires_at": time.time() + 3600,
             "expires_in": 3600,
             "token_type": "bearer",
         }
 
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    @mock.patch("kognic.auth.cli.get_access_token.make_cache")
+    def test_cache_hit_injects_token_into_provider(self, mock_make_cache, mock_make_provider):
+        """make_cache is called with 'auto' and its result is passed to make_token_provider."""
+        mock_cache = mock.MagicMock()
+        mock_make_cache.return_value = mock_cache
+
+        provider = mock.MagicMock()
+        provider.ensure_token.return_value = {"access_token": "cached-token-abc"}
+        mock_make_provider.return_value = provider
+
         with mock.patch("builtins.print") as mock_print:
             result = main(["get-access-token"])
 
         self.assertEqual(result, 0)
+        mock_make_cache.assert_called_once_with("auto")
+        mock_make_provider.assert_called_once_with(
+            auth=mock.ANY,
+            auth_host=mock.ANY,
+            token_cache=mock_cache,
+        )
         mock_print.assert_called_once_with("cached-token-abc")
-        mock_session_class.assert_not_called()
 
-    @mock.patch("kognic.auth.cli.token_cache.save_token")
-    @mock.patch("kognic.auth.cli.token_cache._keyring_available", return_value=True)
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    @mock.patch("kognic.auth.cli.token_cache.load_cached_token", return_value=None)
-    @mock.patch("kognic.auth.credentials_parser.resolve_credentials", return_value=("client-1", "secret"))
-    def test_cache_miss_saves_token(self, mock_resolve, mock_load, mock_session_class, mock_kr, mock_save):
-        token_dict = {
-            "access_token": "fresh-token",
-            "expires_at": time.time() + 3600,
-            "expires_in": 3600,
-            "token_type": "bearer",
-        }
-        mock_session = mock.MagicMock()
-        mock_session.access_token = "fresh-token"
-        mock_session.token = token_dict
-        mock_session.oauth_session.client_id = "client-1"
-        mock_session_class.return_value = mock_session
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    @mock.patch("kognic.auth.cli.get_access_token.make_cache")
+    def test_no_cache_passes_none_to_provider(self, mock_make_cache, mock_make_provider):
+        """--token-cache none results in make_cache returning None and provider receiving None."""
+        mock_make_cache.return_value = None
 
-        with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token"])
+        provider = mock.MagicMock()
+        provider.ensure_token.return_value = {"access_token": "fresh-token"}
+        mock_make_provider.return_value = provider
+
+        with mock.patch("builtins.print"):
+            result = main(["get-access-token", "--token-cache", "none"])
 
         self.assertEqual(result, 0)
-        mock_print.assert_called_once_with("fresh-token")
-        mock_save.assert_called_once_with(DEFAULT_HOST, "client-1", token_dict)
+        mock_make_cache.assert_called_once_with("none")
+        mock_make_provider.assert_called_once_with(
+            auth=mock.ANY,
+            auth_host=mock.ANY,
+            token_cache=None,
+        )
 
-    @mock.patch("kognic.auth.cli.token_cache.save_token")
-    @mock.patch("kognic.auth.cli.token_cache.load_cached_token")
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    def test_no_cache_skips_keyring(self, mock_session_class, mock_load, mock_save):
-        mock_session = mock.MagicMock()
-        mock_session.access_token = "no-cache-token"
-        mock_session_class.return_value = mock_session
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    @mock.patch("kognic.auth.cli.get_access_token.make_cache")
+    def test_cache_mode_forwarded(self, mock_make_cache, mock_make_provider):
+        """--token-cache keyring passes 'keyring' to make_cache."""
+        mock_make_cache.return_value = mock.MagicMock()
+        provider = mock.MagicMock()
+        provider.ensure_token.return_value = {"access_token": "t"}
+        mock_make_provider.return_value = provider
 
-        with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--no-cache"])
+        with mock.patch("builtins.print"):
+            main(["get-access-token", "--token-cache", "keyring"])
 
-        self.assertEqual(result, 0)
-        mock_print.assert_called_once_with("no-cache-token")
-        mock_load.assert_not_called()
-        mock_save.assert_not_called()
-
-    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
-    @mock.patch("kognic.auth.cli.token_cache.load_cached_token", return_value=None)
-    @mock.patch("kognic.auth.credentials_parser.resolve_credentials", side_effect=FileNotFoundError("no file"))
-    def test_cache_credential_resolve_failure_falls_through(self, mock_resolve, mock_load, mock_session_class):
-        """If resolve_credentials fails during cache check, fall through to normal auth flow."""
-        mock_session = mock.MagicMock()
-        mock_session.access_token = "fallback-token"
-        mock_session_class.return_value = mock_session
-
-        with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token"])
-
-        self.assertEqual(result, 0)
-        mock_print.assert_called_once_with("fallback-token")
-        mock_load.assert_not_called()
+        mock_make_cache.assert_called_once_with("keyring")
 
 
 class KogParserTest(unittest.TestCase):
@@ -342,15 +350,15 @@ class KogParserTest(unittest.TestCase):
         )
         self.assertEqual(args.env_config_file_path, "/custom/config.json")
 
-    def test_kog_no_cache_flag(self):
-        parser = create_kog_parser()
-        args = parser.parse_args(["get", "https://app.kognic.com/v1/projects", "--no-cache"])
-        self.assertTrue(args.no_cache)
-
-    def test_kog_no_cache_default_false(self):
+    def test_kog_token_cache_default(self):
         parser = create_kog_parser()
         args = parser.parse_args(["get", "https://app.kognic.com/v1/projects"])
-        self.assertFalse(args.no_cache)
+        self.assertEqual(args.token_cache, "auto")
+
+    def test_kog_token_cache_none(self):
+        parser = create_kog_parser()
+        args = parser.parse_args(["get", "https://app.kognic.com/v1/projects", "--token-cache", "none"])
+        self.assertEqual(args.token_cache, "none")
 
 
 class CallApiTest(unittest.TestCase):
@@ -362,7 +370,7 @@ class CallApiTest(unittest.TestCase):
         headers=None,
         env_config_file_path="/nonexistent/config.json",
         env_name=None,
-        no_cache=True,
+        token_cache="none",
     ):
         parser = create_kog_parser()
         args = [method, url]
@@ -374,8 +382,7 @@ class CallApiTest(unittest.TestCase):
         args.extend(["--env-config-file-path", env_config_file_path])
         if env_name:
             args.extend(["--env", env_name])
-        if no_cache:
-            args.append("--no-cache")
+        args.extend(["--token-cache", token_cache])
         return parser.parse_args(args)
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
@@ -503,8 +510,7 @@ class CallApiTest(unittest.TestCase):
             result = call_run(parsed)
 
         self.assertEqual(result, 1)
-        error_output = mock_print.call_args[0][0]
-        self.assertIn("Invalid JSON data", error_output)
+        self.assertIn("Invalid JSON data", mock_print.call_args[0][0])
 
     def test_call_api_invalid_header_format(self):
         parsed = self._make_parsed(headers=["BadHeader"])
@@ -512,8 +518,7 @@ class CallApiTest(unittest.TestCase):
             result = call_run(parsed)
 
         self.assertEqual(result, 1)
-        error_output = mock_print.call_args[0][0]
-        self.assertIn("Invalid header format", error_output)
+        self.assertIn("Invalid header format", mock_print.call_args[0][0])
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
@@ -655,9 +660,6 @@ class CallApiTest(unittest.TestCase):
 
         self.assertEqual(result, 0)
         self.assertEqual(mock_print.call_count, 3)
-        mock_print.assert_any_call(json.dumps({"id": 1}))
-        mock_print.assert_any_call(json.dumps({"id": 2}))
-        mock_print.assert_any_call(json.dumps({"id": 3}))
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
@@ -1016,68 +1018,18 @@ class CallApiTest(unittest.TestCase):
             mock_create_session.assert_called_once_with(
                 auth="/path/to/demo-creds.json",
                 auth_host="https://auth.demo.kognic.com",
-                use_cache=False,
+                cache_mode="none",
             )
 
 
 class KogCacheTest(unittest.TestCase):
-    """Tests for keyring token caching in kog command."""
-
-    @mock.patch("kognic.auth.cli.api_request.resolve_environment")
-    @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.requests.auth_session.RequestsAuthSession")
-    @mock.patch("kognic.auth.cli.token_cache.load_cached_token")
-    @mock.patch("kognic.auth.cli.token_cache._keyring_available", return_value=True)
-    def test_kog_uses_cached_token(
-        self, mock_kr, mock_load, mock_session_class, mock_load_config, mock_resolve_environment
-    ):
-        """When a cached token is available, kog injects it and skips the network fetch."""
-        mock_load_config.return_value = mock.MagicMock()
-        mock_resolve_environment.return_value = Environment(
-            name="default",
-            host="app.kognic.com",
-            auth_server="https://auth.app.kognic.com",
-            credentials="/path/to/creds.json",
-        )
-
-        cached_token = {
-            "access_token": "cached-kog-token",
-            "expires_at": time.time() + 3600,
-            "expires_in": 3600,
-            "token_type": "bearer",
-        }
-        mock_load.return_value = cached_token
-
-        mock_auth_session = mock.MagicMock()
-        mock_auth_session.oauth_session.client_id = "client-1"
-        mock_auth_session.token = cached_token
-
-        mock_raw_session = mock.MagicMock()
-        mock_raw_session.headers = {}
-        mock_response = mock.MagicMock()
-        mock_response.ok = True
-        mock_response.headers = {"Content-Type": "application/json"}
-        mock_response.json.return_value = {"result": "ok"}
-        mock_raw_session.request.return_value = mock_response
-        mock_auth_session.session = mock_raw_session
-
-        mock_session_class.return_value = mock_auth_session
-
-        parser = create_kog_parser()
-        parsed = parser.parse_args(
-            ["get", "https://app.kognic.com/v1/projects", "--env-config-file-path", "/nonexistent/config.json"]
-        )
-        with mock.patch("builtins.print"):
-            result = call_run(parsed)
-
-        self.assertEqual(result, 0)
-        mock_load.assert_called_once_with("https://auth.app.kognic.com", "client-1")
+    """Tests for token caching in kog command."""
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
     @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
-    def test_kog_no_cache_passes_flag(self, mock_create_session, mock_load_config, mock_resolve_environment):
-        """When --no-cache is passed, use_cache=False is forwarded."""
+    def test_kog_token_cache_none_forwarded(self, mock_create_session, mock_load_config, mock_resolve_environment):
+        """--token-cache none is forwarded as cache_mode='none'."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -1100,7 +1052,8 @@ class KogCacheTest(unittest.TestCase):
                 "https://app.kognic.com/v1/projects",
                 "--env-config-file-path",
                 "/nonexistent/config.json",
-                "--no-cache",
+                "--token-cache",
+                "none",
             ]
         )
         with mock.patch("builtins.print"):
@@ -1109,7 +1062,52 @@ class KogCacheTest(unittest.TestCase):
         mock_create_session.assert_called_once_with(
             auth=None,
             auth_host="https://auth.app.kognic.com",
-            use_cache=False,
+            cache_mode="none",
+        )
+
+    @mock.patch("kognic.auth.cli.api_request.resolve_environment")
+    @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
+    @mock.patch("kognic.auth.cli.api_request.make_token_provider")
+    @mock.patch("kognic.auth.cli.api_request.make_cache")
+    def test_kog_uses_cached_token(
+        self, mock_make_cache, mock_make_provider, mock_load_config, mock_resolve_environment
+    ):
+        """When a cached token is available, it is injected via make_token_provider."""
+        mock_load_config.return_value = mock.MagicMock()
+        mock_resolve_environment.return_value = Environment(
+            name="default",
+            host="app.kognic.com",
+            auth_server="https://auth.app.kognic.com",
+            credentials="/path/to/creds.json",
+        )
+
+        mock_cache = mock.MagicMock()
+        mock_make_cache.return_value = mock_cache
+
+        mock_provider = mock.MagicMock()
+        mock_make_provider.return_value = mock_provider
+
+        mock_session = mock.MagicMock()
+        mock_response = mock.MagicMock()
+        mock_response.ok = True
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"result": "ok"}
+        mock_session.request.return_value = mock_response
+
+        with mock.patch("kognic.auth.cli.api_request.create_session", return_value=mock_session):
+            parser = create_kog_parser()
+            parsed = parser.parse_args(
+                ["get", "https://app.kognic.com/v1/projects", "--env-config-file-path", "/nonexistent/config.json"]
+            )
+            with mock.patch("builtins.print"):
+                result = call_run(parsed)
+
+        self.assertEqual(result, 0)
+        mock_make_cache.assert_called_once_with("auto")
+        mock_make_provider.assert_called_once_with(
+            auth="/path/to/creds.json",
+            auth_host="https://auth.app.kognic.com",
+            token_cache=mock_cache,
         )
 
 

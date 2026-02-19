@@ -4,10 +4,9 @@ import argparse
 import sys
 
 from kognic.auth import DEFAULT_HOST
-from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.internal.token_cache import make_cache
-from kognic.auth.requests.auth_session import RequestsAuthSession
+from kognic.auth.requests.base_client import make_token_provider
 
 COMMAND = "get-access-token"
 
@@ -65,16 +64,12 @@ def run(parsed: argparse.Namespace) -> int:
 
         auth_host = host or DEFAULT_HOST
 
-        cache = make_cache(parsed.token_cache)
-        client_id, client_secret = resolve_credentials(credentials)
-        auth_session = RequestsAuthSession(
-            auth=(client_id, client_secret),
-            host=auth_host,
-            initial_token=cache.load(auth_host, client_id) if (cache and client_id) else None,
-            on_token_updated=(lambda t: cache.save(auth_host, client_id, t)) if (cache and client_id) else None,
+        provider = make_token_provider(
+            auth=credentials,
+            auth_host=auth_host,
+            token_cache=make_cache(parsed.token_cache),
         )
-        _ = auth_session.session  # trigger fetch if no valid initial_token
-        print(auth_session.access_token)
+        print(provider.ensure_token()["access_token"])
         return 0
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
