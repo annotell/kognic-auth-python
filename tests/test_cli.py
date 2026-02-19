@@ -1,4 +1,5 @@
 import json
+import time
 import unittest
 from unittest import mock
 
@@ -45,6 +46,16 @@ class CliParserTest(unittest.TestCase):
             result = main([])
         self.assertEqual(result, 0)
 
+    def test_no_cache_flag(self):
+        parser = create_parser()
+        args = parser.parse_args(["get-access-token", "--no-cache"])
+        self.assertTrue(args.no_cache)
+
+    def test_no_cache_default_false(self):
+        parser = create_parser()
+        args = parser.parse_args(["get-access-token"])
+        self.assertFalse(args.no_cache)
+
 
 class CliMainTest(unittest.TestCase):
     @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
@@ -54,7 +65,7 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.return_value = mock_session
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token"])
+            result = main(["get-access-token", "--no-cache"])
 
         self.assertEqual(result, 0)
         mock_print.assert_called_once_with("test-access-token-123")
@@ -67,7 +78,7 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.return_value = mock_session
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--credentials", "/path/to/creds.json"])
+            result = main(["get-access-token", "--credentials", "/path/to/creds.json", "--no-cache"])
 
         self.assertEqual(result, 0)
         mock_print.assert_called_once_with("token-from-file")
@@ -80,7 +91,7 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.return_value = mock_session
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--server", "https://custom.server"])
+            result = main(["get-access-token", "--server", "https://custom.server", "--no-cache"])
 
         self.assertEqual(result, 0)
         mock_print.assert_called_once_with("custom-server-token")
@@ -93,7 +104,9 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.return_value = mock_session
 
         with mock.patch("builtins.print"):
-            result = main(["get-access-token", "--server", "https://my.server", "--credentials", "creds.json"])
+            result = main(
+                ["get-access-token", "--server", "https://my.server", "--credentials", "creds.json", "--no-cache"]
+            )
 
         self.assertEqual(result, 0)
         mock_session_class.assert_called_once_with(auth="creds.json", host="https://my.server")
@@ -103,7 +116,7 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.side_effect = FileNotFoundError("Could not find Api Credentials file at /bad/path.json")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--credentials", "/bad/path.json"])
+            result = main(["get-access-token", "--credentials", "/bad/path.json", "--no-cache"])
 
         self.assertEqual(result, 1)
         mock_print.assert_called_once()
@@ -114,7 +127,7 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.side_effect = ValueError("Bad auth credentials")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token"])
+            result = main(["get-access-token", "--no-cache"])
 
         self.assertEqual(result, 1)
         mock_print.assert_called_once()
@@ -125,7 +138,7 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.side_effect = Exception("Network error")
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token"])
+            result = main(["get-access-token", "--no-cache"])
 
         self.assertEqual(result, 1)
         mock_print.assert_called_once()
@@ -151,7 +164,7 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.return_value = mock_session
 
         with mock.patch("builtins.print") as mock_print:
-            result = main(["get-access-token", "--env", "demo"])
+            result = main(["get-access-token", "--env", "demo", "--no-cache"])
 
         self.assertEqual(result, 0)
         mock_print.assert_called_once_with("demo-token")
@@ -180,7 +193,9 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.return_value = mock_session
 
         with mock.patch("builtins.print"):
-            result = main(["get-access-token", "--env", "demo", "--server", "https://custom.server"])
+            result = main(
+                ["get-access-token", "--env", "demo", "--server", "https://custom.server", "--no-cache"]
+            )
 
         self.assertEqual(result, 0)
         mock_session_class.assert_called_once_with(
@@ -200,6 +215,86 @@ class CliMainTest(unittest.TestCase):
         self.assertEqual(result, 1)
         mock_print.assert_called_once()
         self.assertIn("Unknown environment", mock_print.call_args[0][0])
+
+
+class CliCacheTest(unittest.TestCase):
+    """Tests for keyring token caching in get-access-token."""
+
+    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
+    @mock.patch("kognic.auth.cli.token_cache.load_cached_token")
+    @mock.patch("kognic.auth.cli.token_cache._keyring_available", return_value=True)
+    @mock.patch("kognic.auth.credentials_parser.resolve_credentials", return_value=("client-1", "secret"))
+    def test_cache_hit_returns_cached_token(self, mock_resolve, mock_kr, mock_load, mock_session_class):
+        mock_load.return_value = {
+            "access_token": "cached-token-abc",
+            "expires_at": time.time() + 3600,
+            "expires_in": 3600,
+            "token_type": "bearer",
+        }
+
+        with mock.patch("builtins.print") as mock_print:
+            result = main(["get-access-token"])
+
+        self.assertEqual(result, 0)
+        mock_print.assert_called_once_with("cached-token-abc")
+        mock_session_class.assert_not_called()
+
+    @mock.patch("kognic.auth.cli.token_cache.save_token")
+    @mock.patch("kognic.auth.cli.token_cache._keyring_available", return_value=True)
+    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
+    @mock.patch("kognic.auth.cli.token_cache.load_cached_token", return_value=None)
+    @mock.patch("kognic.auth.credentials_parser.resolve_credentials", return_value=("client-1", "secret"))
+    def test_cache_miss_saves_token(self, mock_resolve, mock_load, mock_session_class, mock_kr, mock_save):
+        token_dict = {
+            "access_token": "fresh-token",
+            "expires_at": time.time() + 3600,
+            "expires_in": 3600,
+            "token_type": "bearer",
+        }
+        mock_session = mock.MagicMock()
+        mock_session.access_token = "fresh-token"
+        mock_session.token = token_dict
+        mock_session.oauth_session.client_id = "client-1"
+        mock_session_class.return_value = mock_session
+
+        with mock.patch("builtins.print") as mock_print:
+            result = main(["get-access-token"])
+
+        self.assertEqual(result, 0)
+        mock_print.assert_called_once_with("fresh-token")
+        mock_save.assert_called_once_with(DEFAULT_HOST, "client-1", token_dict)
+
+    @mock.patch("kognic.auth.cli.token_cache.save_token")
+    @mock.patch("kognic.auth.cli.token_cache.load_cached_token")
+    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
+    def test_no_cache_skips_keyring(self, mock_session_class, mock_load, mock_save):
+        mock_session = mock.MagicMock()
+        mock_session.access_token = "no-cache-token"
+        mock_session_class.return_value = mock_session
+
+        with mock.patch("builtins.print") as mock_print:
+            result = main(["get-access-token", "--no-cache"])
+
+        self.assertEqual(result, 0)
+        mock_print.assert_called_once_with("no-cache-token")
+        mock_load.assert_not_called()
+        mock_save.assert_not_called()
+
+    @mock.patch("kognic.auth.cli.get_access_token.RequestsAuthSession")
+    @mock.patch("kognic.auth.cli.token_cache.load_cached_token", return_value=None)
+    @mock.patch("kognic.auth.credentials_parser.resolve_credentials", side_effect=FileNotFoundError("no file"))
+    def test_cache_credential_resolve_failure_falls_through(self, mock_resolve, mock_load, mock_session_class):
+        """If resolve_credentials fails during cache check, fall through to normal auth flow."""
+        mock_session = mock.MagicMock()
+        mock_session.access_token = "fallback-token"
+        mock_session_class.return_value = mock_session
+
+        with mock.patch("builtins.print") as mock_print:
+            result = main(["get-access-token"])
+
+        self.assertEqual(result, 0)
+        mock_print.assert_called_once_with("fallback-token")
+        mock_load.assert_not_called()
 
 
 class KogParserTest(unittest.TestCase):
@@ -249,6 +344,16 @@ class KogParserTest(unittest.TestCase):
         )
         self.assertEqual(args.env_config_file_path, "/custom/config.json")
 
+    def test_kog_no_cache_flag(self):
+        parser = create_kog_parser()
+        args = parser.parse_args(["get", "https://app.kognic.com/v1/projects", "--no-cache"])
+        self.assertTrue(args.no_cache)
+
+    def test_kog_no_cache_default_false(self):
+        parser = create_kog_parser()
+        args = parser.parse_args(["get", "https://app.kognic.com/v1/projects"])
+        self.assertFalse(args.no_cache)
+
 
 class CallApiTest(unittest.TestCase):
     def _make_parsed(
@@ -259,6 +364,7 @@ class CallApiTest(unittest.TestCase):
         headers=None,
         env_config_file_path="/nonexistent/config.json",
         env_name=None,
+        no_cache=True,
     ):
         parser = create_kog_parser()
         args = [method, url]
@@ -270,12 +376,14 @@ class CallApiTest(unittest.TestCase):
         args.extend(["--env-config-file-path", env_config_file_path])
         if env_name:
             args.extend(["--env", env_name])
+        if no_cache:
+            args.append("--no-cache")
         return parser.parse_args(args)
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_get_success(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_get_success(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -289,7 +397,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"projects": []}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         with mock.patch("builtins.print") as mock_print:
@@ -306,8 +414,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_post_with_data(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_post_with_data(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -321,7 +429,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"id": 1}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed(method="post", data='{"name": "test"}')
         with mock.patch("builtins.print"):
@@ -337,8 +445,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_with_custom_headers(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_with_custom_headers(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -352,7 +460,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "text/plain"}
         mock_response.text = "OK"
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed(headers=["Accept: text/plain", "X-Custom: value"])
         with mock.patch("builtins.print"):
@@ -368,8 +476,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_error_status(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_error_status(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -383,7 +491,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"error": "not found"}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         with mock.patch("builtins.print"):
@@ -411,8 +519,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_plain_text_response(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_plain_text_response(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -426,7 +534,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "text/plain"}
         mock_response.text = "Hello World"
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         with mock.patch("builtins.print") as mock_print:
@@ -437,8 +545,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_jsonl_data_array(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_jsonl_data_array(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -452,7 +560,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "jsonl"
@@ -466,8 +574,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_jsonl_single_key_non_data(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_jsonl_single_key_non_data(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """When --format=jsonl is used and response has a single key holding a list, flatten it."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -482,7 +590,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"projects": [{"id": 1}, {"id": 2}]}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "jsonl"
@@ -496,8 +604,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_jsonl_multiple_keys(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_jsonl_multiple_keys(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """When --format=jsonl is used but response has multiple keys, pretty-print as usual."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -512,7 +620,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": [{"id": 1}], "total": 1}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "jsonl"
@@ -524,8 +632,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_jsonl_top_level_list(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_jsonl_top_level_list(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """When --format=jsonl is used and response body is a list, flatten it."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -540,7 +648,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = [{"id": 1}, {"id": 2}, {"id": 3}]
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "jsonl"
@@ -555,8 +663,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_jsonl_empty_data(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_jsonl_empty_data(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """When --format=jsonl is used and data is an empty list, nothing is printed."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -571,7 +679,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": []}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "jsonl"
@@ -583,8 +691,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_csv_data_array(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_csv_data_array(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -598,7 +706,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "csv"
@@ -614,8 +722,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_tsv_data_array(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_tsv_data_array(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -629,7 +737,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "tsv"
@@ -645,8 +753,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_table_data_array(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_table_data_array(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -660,7 +768,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": [{"id": 1, "name": "alice"}, {"id": 2, "name": "b"}]}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "table"
@@ -676,8 +784,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_table_empty_data(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_table_empty_data(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """Table with empty list prints nothing."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -692,7 +800,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": []}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "table"
@@ -704,8 +812,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_csv_nested_values(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_csv_nested_values(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """Nested dicts and lists are JSON-serialized in CSV output."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -720,7 +828,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": [{"id": 1, "tags": ["a", "b"], "meta": {"key": "val"}}]}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "csv"
@@ -735,8 +843,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_table_nested_values(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_table_nested_values(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """Nested dicts and lists are JSON-serialized in table output."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -751,7 +859,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": [{"id": 1, "tags": ["a", "b"]}]}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "table"
@@ -766,8 +874,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_csv_top_level_list(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_csv_top_level_list(self, mock_create_session, mock_load_config, mock_resolve_environment):
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -781,7 +889,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = [{"x": 10, "y": 20}, {"x": 30, "y": 40}]
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "csv"
@@ -797,8 +905,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_csv_sparse_keys(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_csv_sparse_keys(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """CSV output includes all keys across all rows, with blanks for missing values."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -813,7 +921,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": [{"id": 1, "name": "a"}, {"id": 2, "extra": "z"}]}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "csv"
@@ -829,8 +937,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_csv_empty_data(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_csv_empty_data(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """CSV with empty list prints nothing."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -845,7 +953,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"data": []}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "csv"
@@ -857,8 +965,8 @@ class CallApiTest(unittest.TestCase):
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
-    @mock.patch("kognic.auth.cli.api_request.create_session")
-    def test_call_api_csv_not_flattenable(self, mock_session_class, mock_load_config, mock_resolve_environment):
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_call_api_csv_not_flattenable(self, mock_create_session, mock_load_config, mock_resolve_environment):
         """CSV with non-flattenable response falls back to pretty JSON."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
@@ -873,7 +981,7 @@ class CallApiTest(unittest.TestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = {"a": 1, "b": 2}
         mock_session.request.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_create_session.return_value = mock_session
 
         parsed = self._make_parsed()
         parsed.output_format = "csv"
@@ -894,7 +1002,9 @@ class CallApiTest(unittest.TestCase):
             credentials="/path/to/demo-creds.json",
         )
 
-        with mock.patch("kognic.auth.cli.api_request.create_session") as mock_create_session:
+        with mock.patch(
+            "kognic.auth.cli.api_request._create_authenticated_session"
+        ) as mock_create_session:
             mock_session = mock.MagicMock()
             mock_response = mock.MagicMock()
             mock_response.ok = True
@@ -910,7 +1020,93 @@ class CallApiTest(unittest.TestCase):
             mock_create_session.assert_called_once_with(
                 auth="/path/to/demo-creds.json",
                 auth_host="https://auth.demo.kognic.com",
+                use_cache=False,
             )
+
+
+class KogCacheTest(unittest.TestCase):
+    """Tests for keyring token caching in kog command."""
+
+    @mock.patch("kognic.auth.cli.api_request.resolve_environment")
+    @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
+    @mock.patch("kognic.auth.requests.auth_session.RequestsAuthSession")
+    @mock.patch("kognic.auth.cli.token_cache.load_cached_token")
+    @mock.patch("kognic.auth.cli.token_cache._keyring_available", return_value=True)
+    def test_kog_uses_cached_token(
+        self, mock_kr, mock_load, mock_session_class, mock_load_config, mock_resolve_environment
+    ):
+        """When a cached token is available, kog injects it and skips the network fetch."""
+        mock_load_config.return_value = mock.MagicMock()
+        mock_resolve_environment.return_value = Environment(
+            name="default",
+            host="app.kognic.com",
+            auth_server="https://auth.app.kognic.com",
+            credentials="/path/to/creds.json",
+        )
+
+        cached_token = {
+            "access_token": "cached-kog-token",
+            "expires_at": time.time() + 3600,
+            "expires_in": 3600,
+            "token_type": "bearer",
+        }
+        mock_load.return_value = cached_token
+
+        mock_auth_session = mock.MagicMock()
+        mock_auth_session.oauth_session.client_id = "client-1"
+        mock_auth_session.token = cached_token
+
+        mock_raw_session = mock.MagicMock()
+        mock_raw_session.headers = {}
+        mock_response = mock.MagicMock()
+        mock_response.ok = True
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"result": "ok"}
+        mock_raw_session.request.return_value = mock_response
+        mock_auth_session.session = mock_raw_session
+
+        mock_session_class.return_value = mock_auth_session
+
+        parser = create_kog_parser()
+        parsed = parser.parse_args(["get", "https://app.kognic.com/v1/projects",
+                                    "--env-config-file-path", "/nonexistent/config.json"])
+        with mock.patch("builtins.print"):
+            result = call_run(parsed)
+
+        self.assertEqual(result, 0)
+        mock_load.assert_called_once_with("https://auth.app.kognic.com", "client-1")
+
+    @mock.patch("kognic.auth.cli.api_request.resolve_environment")
+    @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
+    @mock.patch("kognic.auth.cli.api_request._create_authenticated_session")
+    def test_kog_no_cache_passes_flag(self, mock_create_session, mock_load_config, mock_resolve_environment):
+        """When --no-cache is passed, use_cache=False is forwarded."""
+        mock_load_config.return_value = mock.MagicMock()
+        mock_resolve_environment.return_value = Environment(
+            name="default",
+            host="app.kognic.com",
+            auth_server="https://auth.app.kognic.com",
+            credentials=None,
+        )
+        mock_session = mock.MagicMock()
+        mock_response = mock.MagicMock()
+        mock_response.ok = True
+        mock_response.headers = {"Content-Type": "text/plain"}
+        mock_response.text = "ok"
+        mock_session.request.return_value = mock_response
+        mock_create_session.return_value = mock_session
+
+        parser = create_kog_parser()
+        parsed = parser.parse_args(["get", "https://app.kognic.com/v1/projects",
+                                    "--env-config-file-path", "/nonexistent/config.json", "--no-cache"])
+        with mock.patch("builtins.print"):
+            call_run(parsed)
+
+        mock_create_session.assert_called_once_with(
+            auth=None,
+            auth_host="https://auth.app.kognic.com",
+            use_cache=False,
+        )
 
 
 if __name__ == "__main__":
