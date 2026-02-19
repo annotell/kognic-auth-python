@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 import requests
 from requests import Session
 from requests.adapters import HTTPAdapter, Retry
+from requests.auth import AuthBase
 
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import handle_sunset
@@ -49,7 +50,7 @@ def _check_response(resp: requests.Response):
         ) from e
 
 
-class _KognicBearerAuth(requests.AuthBase):
+class _KognicBearerAuth(AuthBase):
     """Injects a Bearer token from a RequestsAuthSession into each request.
 
     Handles 401 responses by invalidating the cached token and retrying once.

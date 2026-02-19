@@ -494,6 +494,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+cli = [
+    { name = "keyring" },
+    { name = "requests" },
+]
 full = [
     { name = "httpx" },
     { name = "keyring" },
@@ -501,9 +505,6 @@ full = [
 ]
 httpx = [
     { name = "httpx" },
-]
-keyring = [
-    { name = "keyring" },
 ]
 requests = [
     { name = "requests" },
@@ -524,12 +525,13 @@ requires-dist = [
     { name = "authlib", specifier = ">=0.14.1,<1.7" },
     { name = "httpx", marker = "extra == 'full'", specifier = ">=0.20,<1" },
     { name = "httpx", marker = "extra == 'httpx'", specifier = ">=0.20,<1" },
+    { name = "keyring", marker = "extra == 'cli'", specifier = ">=23.0" },
     { name = "keyring", marker = "extra == 'full'", specifier = ">=23.0" },
-    { name = "keyring", marker = "extra == 'keyring'", specifier = ">=23.0" },
+    { name = "requests", marker = "extra == 'cli'", specifier = ">=2.20,<3" },
     { name = "requests", marker = "extra == 'full'", specifier = ">=2.20,<3" },
     { name = "requests", marker = "extra == 'requests'", specifier = ">=2.20,<3" },
 ]
-provides-extras = ["httpx", "requests", "keyring", "full"]
+provides-extras = ["httpx", "requests", "cli", "full"]
 
 [package.metadata.requires-dev]
 dev = [
