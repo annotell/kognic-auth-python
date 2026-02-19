@@ -8,9 +8,9 @@ import sys
 from typing import Any
 
 from kognic.auth.cli import _configure_logging
-from kognic.auth.cli.token_cache import make_cache
 from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config, resolve_environment
+from kognic.auth.internal.token_cache import make_cache
 from kognic.auth.requests.base_client import create_session
 
 METHODS = ["get", "post", "put", "patch", "delete", "head", "options"]

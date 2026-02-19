@@ -4,9 +4,9 @@ import argparse
 import sys
 
 from kognic.auth import DEFAULT_HOST
-from kognic.auth.cli.token_cache import make_cache
 from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
+from kognic.auth.internal.token_cache import make_cache
 from kognic.auth.requests.auth_session import RequestsAuthSession
 
 COMMAND = "get-access-token"
