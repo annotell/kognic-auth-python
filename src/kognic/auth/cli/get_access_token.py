@@ -4,6 +4,8 @@ import argparse
 import sys
 
 from kognic.auth import DEFAULT_HOST
+from kognic.auth.cli.token_cache import make_cache
+from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.requests.auth_session import RequestsAuthSession
 
@@ -36,10 +38,10 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Use a specific environment from the config file",
     )
     token_parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        default=False,
-        help="Skip reading/writing cached tokens from the system keyring",
+        "--token-cache",
+        choices=["auto", "keyring", "file", "none"],
+        default="auto",
+        help="Token cache backend: auto (default), keyring, file, or none",
     )
 
 
@@ -61,18 +63,15 @@ def run(parsed: argparse.Namespace) -> int:
 
         auth_host = host or DEFAULT_HOST
 
-        # Try loading a cached token from the keyring
-        if not parsed.no_cache:
-            from kognic.auth.cli.token_cache import load_cached_token
-            from kognic.auth.credentials_parser import resolve_credentials
-
+        cache = make_cache(parsed.token_cache)
+        if cache is not None:
             try:
                 client_id, _ = resolve_credentials(credentials)
             except Exception:
                 client_id = None
 
             if client_id:
-                cached = load_cached_token(auth_host, client_id)
+                cached = cache.load(auth_host, client_id)
                 if cached:
                     print(cached["access_token"])
                     return 0
@@ -84,15 +83,13 @@ def run(parsed: argparse.Namespace) -> int:
         # Access .session to trigger token fetch
         _ = session.session
 
-        # Save the freshly fetched token to keyring
-        if not parsed.no_cache:
+        # Save the freshly fetched token to the cache
+        if cache is not None:
             token = session.token
             if isinstance(token, dict):
-                from kognic.auth.cli.token_cache import save_token
-
                 cid = session.oauth_session.client_id
                 if cid:
-                    save_token(auth_host, cid, token)
+                    cache.save(auth_host, cid, token)
 
         print(session.access_token)
         return 0

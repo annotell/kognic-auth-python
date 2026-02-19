@@ -1,4 +1,4 @@
-"""CLI token cache using the system keyring.
+"""CLI token cache backends.
 
 This module is used ONLY by the CLI commands, not the library API.
 All keyring imports are lazy so the module works when keyring is not installed.
@@ -9,7 +9,11 @@ from __future__ import annotations
 import json
 import logging
 import time
+from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Optional
+
+from kognic.auth.env_config import _DEFAULT_CACHE_PATH
 
 log = logging.getLogger(__name__)
 
@@ -20,76 +24,175 @@ SERVICE_NAME = "kognic-auth"
 EXPIRY_MARGIN_SECONDS = 30
 
 
-def _keyring_available() -> bool:
-    """Check if the keyring package is installed and a usable backend exists."""
-    try:
-        import keyring
-
-        backend = keyring.get_keyring()
-        # The "fail" backend is not usable
-        if "fail" in type(backend).__name__.lower():
-            return False
-        return True
-    except Exception:
-        return False
-
-
 def _make_key(auth_server: str, client_id: str) -> str:
     return f"{auth_server}:{client_id}"
 
 
-def load_cached_token(auth_server: str, client_id: str) -> Optional[dict]:
-    """Load a non-expired token from the keyring.
+def _is_valid(token: dict) -> bool:
+    expires_at = token.get("expires_at")
+    if expires_at is None:
+        return False
+    return time.time() < (expires_at - EXPIRY_MARGIN_SECONDS)
 
-    Returns the token dict if found and still valid, otherwise None.
+
+class TokenCache(ABC):
+    """Abstract base class for CLI token caches."""
+
+    @abstractmethod
+    def load(self, auth_server: str, client_id: str) -> Optional[dict]:
+        """Return a non-expired token dict, or None."""
+
+    @abstractmethod
+    def save(self, auth_server: str, client_id: str, token: dict) -> None:
+        """Persist a token dict. Silently ignores errors."""
+
+    @abstractmethod
+    def clear(self, auth_server: str, client_id: str) -> None:
+        """Remove a cached token. Silently ignores errors."""
+
+
+_KEYRING_MISSING = object()  # sentinel: import attempted but unavailable
+
+
+class KeyringTokenCache(TokenCache):
+    """Token cache backed by the system keyring."""
+
+    def __init__(self) -> None:
+        self._keyring_module = None  # not yet resolved
+
+    def _keyring(self):
+        """Return the keyring module if usable, else None. Result is cached."""
+        if self._keyring_module is _KEYRING_MISSING:
+            return None
+        if self._keyring_module is not None:
+            return self._keyring_module
+        try:
+            import keyring
+
+            backend = keyring.get_keyring()
+            if "fail" in type(backend).__name__.lower():
+                raise RuntimeError("unusable keyring backend")
+            self._keyring_module = keyring
+        except Exception:
+            self._keyring_module = _KEYRING_MISSING
+            return None
+        return self._keyring_module
+
+    def load(self, auth_server: str, client_id: str) -> Optional[dict]:
+        kr = self._keyring()
+        if kr is None:
+            return None
+        try:
+            key = _make_key(auth_server, client_id)
+            stored = kr.get_password(SERVICE_NAME, key)
+            if stored is None:
+                return None
+            token = json.loads(stored)
+            if not _is_valid(token):
+                log.debug("Cached keyring token expired or missing expires_at, discarding")
+                return None
+            log.debug("Using cached token from keyring (key=%s)", key)
+            return token
+        except Exception:
+            log.debug("Failed to load token from keyring", exc_info=True)
+            return None
+
+    def save(self, auth_server: str, client_id: str, token: dict) -> None:
+        kr = self._keyring()
+        if kr is None:
+            return
+        try:
+            key = _make_key(auth_server, client_id)
+            kr.set_password(SERVICE_NAME, key, json.dumps(token))
+            log.debug("Saved token to keyring for key=%s", key)
+        except Exception:
+            log.debug("Failed to save token to keyring", exc_info=True)
+
+    def clear(self, auth_server: str, client_id: str) -> None:
+        kr = self._keyring()
+        if kr is None:
+            return
+        try:
+            key = _make_key(auth_server, client_id)
+            kr.delete_password(SERVICE_NAME, key)
+            log.debug("Cleared cached token from keyring for key=%s", key)
+        except Exception:
+            log.debug("Failed to clear token from keyring", exc_info=True)
+
+
+class FileTokenCache(TokenCache):
+    """Token cache backed by a JSON file on disk."""
+
+    def __init__(self, path: Path = _DEFAULT_CACHE_PATH) -> None:
+        self.path = path
+
+    def _load_all(self) -> dict:
+        try:
+            return json.loads(self.path.read_text())
+        except FileNotFoundError:
+            return {}
+        except Exception:
+            log.debug("Failed to read token cache file", exc_info=True)
+            return {}
+
+    def _save_all(self, data: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(data, indent=2))
+
+    def load(self, auth_server: str, client_id: str) -> Optional[dict]:
+        try:
+            key = _make_key(auth_server, client_id)
+            token = self._load_all().get(key)
+            if token is None:
+                return None
+            if not _is_valid(token):
+                log.debug("Cached file token expired or missing expires_at, discarding")
+                return None
+            log.debug("Using cached token from file (key=%s)", key)
+            return token
+        except Exception:
+            log.debug("Failed to load token from file cache", exc_info=True)
+            return None
+
+    def save(self, auth_server: str, client_id: str, token: dict) -> None:
+        try:
+            key = _make_key(auth_server, client_id)
+            data = self._load_all()
+            data[key] = token
+            self._save_all(data)
+            log.debug("Saved token to file cache for key=%s", key)
+        except Exception:
+            log.debug("Failed to save token to file cache", exc_info=True)
+
+    def clear(self, auth_server: str, client_id: str) -> None:
+        try:
+            key = _make_key(auth_server, client_id)
+            data = self._load_all()
+            if key in data:
+                del data[key]
+                self._save_all(data)
+            log.debug("Cleared cached token from file cache for key=%s", key)
+        except Exception:
+            log.debug("Failed to clear token from file cache", exc_info=True)
+
+
+def make_cache(mode: str) -> TokenCache | None:
+    """Return a TokenCache for the given mode, or None for 'none'.
+
+    Modes:
+      auto    – keyring if available, file otherwise (default)
+      keyring – system keyring only
+      file    – file-based cache only
+      none    – no caching
     """
-    if not _keyring_available():
+    if mode == "none":
         return None
-    try:
-        import keyring
-
-        key = _make_key(auth_server, client_id)
-        stored = keyring.get_password(SERVICE_NAME, key)
-        if stored is None:
-            return None
-        token = json.loads(stored)
-        expires_at = token.get("expires_at")
-        if expires_at is None:
-            log.debug("Cached token has no expires_at, discarding")
-            return None
-        if time.time() >= (expires_at - EXPIRY_MARGIN_SECONDS):
-            log.debug("Cached token expired, discarding")
-            return None
-        log.debug("Using cached token from keyring (expires_at=%s)", expires_at)
-        return token
-    except Exception:
-        log.debug("Failed to load token from keyring", exc_info=True)
-        return None
-
-
-def save_token(auth_server: str, client_id: str, token: dict) -> None:
-    """Save a token dict to the keyring. Silently ignores errors."""
-    if not _keyring_available():
-        return
-    try:
-        import keyring
-
-        key = _make_key(auth_server, client_id)
-        keyring.set_password(SERVICE_NAME, key, json.dumps(token))
-        log.debug("Saved token to keyring for key=%s", key)
-    except Exception:
-        log.debug("Failed to save token to keyring", exc_info=True)
-
-
-def clear_token(auth_server: str, client_id: str) -> None:
-    """Remove a cached token from the keyring. Silently ignores errors."""
-    if not _keyring_available():
-        return
-    try:
-        import keyring
-
-        key = _make_key(auth_server, client_id)
-        keyring.delete_password(SERVICE_NAME, key)
-        log.debug("Cleared cached token from keyring for key=%s", key)
-    except Exception:
-        log.debug("Failed to clear token from keyring", exc_info=True)
+    if mode == "file":
+        return FileTokenCache()
+    if mode == "keyring":
+        return KeyringTokenCache()
+    # auto
+    candidate = KeyringTokenCache()
+    if candidate._keyring() is not None:
+        return candidate
+    return FileTokenCache()
