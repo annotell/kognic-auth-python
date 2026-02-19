@@ -95,12 +95,20 @@ class RequestsAuthSession(AuthClient):
         if self._on_token_updated is not None:
             self._on_token_updated(token)
 
-    @property
-    def session(self):
+    def ensure_token(self) -> dict:
+        """Return a valid token, fetching one if needed. Thread-safe."""
         if not self.token:
             with self._lock:
                 if not self.token:
-                    # check again when coming out of the lock that the token is still not set
                     token = self.oauth_session.fetch_access_token(url=self.token_url)
                     self._update_token(token)
+        return self.token
+
+    def invalidate_token(self) -> None:
+        """Clear the cached token so the next ensure_token() call fetches a fresh one."""
+        self.oauth_session.token = None
+
+    @property
+    def session(self):
+        self.ensure_token()
         return self.oauth_session.session

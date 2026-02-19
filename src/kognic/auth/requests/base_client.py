@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from threading import Lock
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from weakref import WeakValueDictionary
 
 if TYPE_CHECKING:
     from typing import Self
@@ -17,6 +19,7 @@ from requests.adapters import HTTPAdapter, Retry
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import handle_sunset
 from kognic.auth._user_agent import get_user_agent
+from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.serde import serialize_body
@@ -44,6 +47,32 @@ def _check_response(resp: requests.Response):
             response=resp,
             request=resp.request,
         ) from e
+
+
+class _KognicBearerAuth(requests.AuthBase):
+    """Injects a Bearer token from a RequestsAuthSession into each request.
+
+    Handles 401 responses by invalidating the cached token and retrying once.
+    """
+
+    def __init__(self, provider: RequestsAuthSession) -> None:
+        self._provider = provider
+
+    def __call__(self, r: requests.PreparedRequest) -> requests.PreparedRequest:
+        r.headers["Authorization"] = f"Bearer {self._provider.ensure_token()['access_token']}"
+        r.register_hook("response", self._handle_401)
+        return r
+
+    def _handle_401(self, r: requests.Response, **kwargs) -> requests.Response:
+        if r.status_code != 401:
+            return r
+        self._provider.invalidate_token()
+        _ = r.content  # drain socket so connection can be reused
+        prep = r.request.copy()
+        prep.headers["Authorization"] = f"Bearer {self._provider.ensure_token()['access_token']}"
+        _r = r.connection.send(prep, **kwargs)
+        _r.history.append(r)
+        return _r
 
 
 def _set_session_user_agent(session: Session, client_name: Optional[str] = None):
@@ -92,6 +121,7 @@ def create_session(
     json_serializer: Callable[[Any], Any] = serialize_body,
     initial_token: Optional[dict] = None,
     on_token_updated: Optional[Callable[[dict], None]] = None,
+    token_provider: Optional[RequestsAuthSession] = None,
 ) -> Session:
     """Create a requests session with enhancements.
 
@@ -109,25 +139,63 @@ def create_session(
         json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
         initial_token: Pre-fetched token dict to inject, skipping the initial network fetch if valid.
         on_token_updated: Callback invoked with the new token dict whenever a fresh token is fetched.
+        token_provider: Explicit token provider to use. When given, auth/initial_token/on_token_updated
+            are ignored. Multiple sessions sharing one provider share the same token lifecycle.
 
     Returns:
         Configured requests Session
     """
-    session = RequestsAuthSession(
-        auth=auth,
-        host=auth_host,
-        token_endpoint=auth_token_endpoint,
-        initial_token=initial_token,
-        on_token_updated=on_token_updated,
-    ).session
+    if token_provider is None:
+        token_provider = RequestsAuthSession(
+            auth=auth,
+            host=auth_host,
+            token_endpoint=auth_token_endpoint,
+            initial_token=initial_token,
+            on_token_updated=on_token_updated,
+        )
 
+    session = requests.Session()
+    session.auth = _KognicBearerAuth(token_provider)
     _set_session_user_agent(session, client_name)
     _monkey_patch_send(session, json_serializer)
-
     session.mount("http://", HTTPAdapter(max_retries=DEFAULT_RETRY))
     session.mount("https://", HTTPAdapter(max_retries=DEFAULT_RETRY))
-
     return session
+
+
+_provider_pool: WeakValueDictionary[tuple, RequestsAuthSession] = WeakValueDictionary()
+_provider_pool_lock = threading.Lock()
+
+
+def _get_shared_provider(
+    auth: Optional[Union[str, os.PathLike, tuple]],
+    auth_host: str,
+    auth_token_endpoint: str,
+) -> RequestsAuthSession:
+    """Return a shared RequestsAuthSession for the given credentials, creating one if needed.
+
+    Providers are keyed by (client_id, auth_host, auth_token_endpoint) and held weakly,
+    so they are GC'd once no BaseApiClient instances reference them.
+    """
+    try:
+        client_id, client_secret = resolve_credentials(auth)
+    except Exception:
+        client_id, client_secret = None, None
+
+    if not client_id or not client_secret:
+        return RequestsAuthSession(auth=auth, host=auth_host, token_endpoint=auth_token_endpoint)
+
+    key = (client_id, auth_host, auth_token_endpoint)
+    with _provider_pool_lock:
+        provider = _provider_pool.get(key)
+        if provider is None:
+            provider = RequestsAuthSession(
+                auth=(client_id, client_secret),
+                host=auth_host,
+                token_endpoint=auth_token_endpoint,
+            )
+            _provider_pool[key] = provider
+    return provider
 
 
 class BaseApiClient:
@@ -139,6 +207,9 @@ class BaseApiClient:
     - Retry logic for transient errors (502, 503, 504)
     - Sunset header handling
     - Enhanced error messages
+
+    Clients with the same credentials and auth host automatically share a token provider,
+    so only one token fetch occurs across all instances with those credentials.
 
     The interface is consistent with requests - use session.get(), session.post(), etc.
     Calls return the response object. Use response.json() to get the data.
@@ -157,6 +228,7 @@ class BaseApiClient:
         auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
         json_serializer: Callable[[Any], Any] = serialize_body,
+        token_provider: Optional[RequestsAuthSession] = None,
     ):
         """Initialize the API client.
 
@@ -166,12 +238,15 @@ class BaseApiClient:
             auth_token_endpoint: Relative path to token endpoint
             client_name: Name added to User-Agent. Use "auto" for class name, None for no name.
             json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
+            token_provider: Explicit token provider to share across clients. When omitted, a shared
+                provider is looked up (or created) by credentials + auth_host.
         """
         self._session: Optional[Session] = None
         self._auth = auth
         self._auth_host = auth_host
         self._auth_token_endpoint = auth_token_endpoint
         self._json_serializer = json_serializer
+        self._token_provider = token_provider
         self._lock = Lock()
 
         if client_name == "auto":
@@ -187,10 +262,11 @@ class BaseApiClient:
         if self._session is None:
             with self._lock:
                 if self._session is None:
+                    provider = self._token_provider or _get_shared_provider(
+                        self._auth, self._auth_host, self._auth_token_endpoint
+                    )
                     self._session = create_session(
-                        auth=self._auth,
-                        auth_host=self._auth_host,
-                        auth_token_endpoint=self._auth_token_endpoint,
+                        token_provider=provider,
                         client_name=self._client_name,
                         json_serializer=self._json_serializer,
                     )
