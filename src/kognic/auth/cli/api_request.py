@@ -7,7 +7,11 @@ import json
 import sys
 from typing import Any
 
+from kognic.auth.cli import _configure_logging
+from kognic.auth.cli.token_cache import make_cache
+from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config, resolve_environment
+from kognic.auth.requests.base_client import create_session
 
 METHODS = ["get", "post", "put", "patch", "delete", "head", "options"]
 
@@ -42,11 +46,13 @@ def _create_parser() -> argparse.ArgumentParser:
         help="Output format: json (default), jsonl (one JSON object per line), csv, tsv, table (markdown)",
     )
     parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        default=False,
-        help="Skip reading/writing cached tokens from the system keyring",
+        "--token-cache",
+        choices=["auto", "keyring", "file", "none"],
+        default="auto",
+        help="Token cache backend: auto (default), keyring, file, or none. "
+        "Auto will use keyring if available, otherwise file.",
     )
+    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Enable debug logging")
     return parser
 
 
@@ -159,51 +165,15 @@ def _print_response(response: Any, *, output_format: str = "json") -> None:
         print(response.text)
 
 
-def _create_authenticated_session(*, auth, auth_host, use_cache=True):
-    """Create an authenticated session, optionally using cached tokens from the keyring.
-
-    Constructs RequestsAuthSession directly (instead of via create_session) so that
-    a cached token can be injected before the session property triggers a network fetch.
-    """
-    import requests
-    from requests.adapters import HTTPAdapter
-
-    from kognic.auth._user_agent import get_user_agent
-    from kognic.auth.requests.auth_session import RequestsAuthSession
-    from kognic.auth.requests.base_client import DEFAULT_RETRY
-
-    auth_session = RequestsAuthSession(auth=auth, host=auth_host)
-    had_token = False
-
-    if use_cache:
-        from kognic.auth.cli.token_cache import load_cached_token
-
-        client_id = auth_session.oauth_session.client_id
-        if client_id:
-            cached = load_cached_token(auth_host, client_id)
-            if cached:
-                auth_session.oauth_session.token = cached
-                had_token = True
-
-    # Access .session — skips network fetch if token was injected above
-    session = auth_session.session
-
-    # Apply session enhancements (retry + user-agent)
-    session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", None)
-    session.mount("http://", HTTPAdapter(max_retries=DEFAULT_RETRY))
-    session.mount("https://", HTTPAdapter(max_retries=DEFAULT_RETRY))
-
-    # Save freshly fetched token to keyring
-    if use_cache and not had_token:
-        token = auth_session.token
-        if isinstance(token, dict):
-            from kognic.auth.cli.token_cache import save_token
-
-            client_id = auth_session.oauth_session.client_id
-            if client_id:
-                save_token(auth_host, client_id, token)
-
-    return session
+def _create_authenticated_session(*, auth, auth_host, cache_mode: str = "auto"):
+    cache = make_cache(cache_mode)
+    client_id, client_secret = resolve_credentials(auth)
+    return create_session(
+        auth=(client_id, client_secret),
+        auth_host=auth_host,
+        initial_token=cache.load(auth_host, client_id) if (cache and client_id) else None,
+        on_token_updated=(lambda t: cache.save(auth_host, client_id, t)) if (cache and client_id) else None,
+    )
 
 
 def run(parsed: argparse.Namespace) -> int:
@@ -217,7 +187,7 @@ def run(parsed: argparse.Namespace) -> int:
         session = _create_authenticated_session(
             auth=env.credentials,
             auth_host=env.auth_server,
-            use_cache=not parsed.no_cache,
+            cache_mode=parsed.token_cache,
         )
 
         response = session.request(
@@ -227,9 +197,6 @@ def run(parsed: argparse.Namespace) -> int:
             headers=headers if headers else None,
         )
 
-        from kognic.auth.requests.base_client import _check_response
-
-        _check_response(response)
         _print_response(response, output_format=parsed.output_format)
         return 0 if response.ok else 1
 
@@ -242,9 +209,7 @@ def run(parsed: argparse.Namespace) -> int:
 
 
 def main(args: list[str] | None = None) -> None:
-    from kognic.auth.cli import _configure_logging
-
-    _configure_logging()
     parser = _create_parser()
     parsed = parser.parse_args(args)
+    _configure_logging(verbose=parsed.verbose)
     sys.exit(run(parsed))

@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-from functools import lru_cache
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 if TYPE_CHECKING:
     from typing import Self
@@ -18,29 +17,11 @@ from requests.adapters import HTTPAdapter, Retry
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import handle_sunset
 from kognic.auth._user_agent import get_user_agent
-from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.serde import serialize_body
 
 logger = logging.getLogger(__name__)
-
-
-@lru_cache(maxsize=None)
-def _create_cached_oauth_session(
-    auth_tuple: Optional[Tuple[str, str]],
-    auth_host: str,
-    auth_token_endpoint: str,
-) -> Session:
-    """Create and cache an OAuth session by credentials.
-
-    Caching avoids creating multiple sessions for the same credentials.
-    """
-    return RequestsAuthSession(
-        auth=auth_tuple,
-        host=auth_host,
-        token_endpoint=auth_token_endpoint,
-    ).session
 
 
 DEFAULT_RETRY = Retry(total=3, connect=3, read=3, backoff_factor=0.5, status_forcelist=[502, 503, 504])
@@ -65,55 +46,18 @@ def _check_response(resp: requests.Response):
         ) from e
 
 
-def _resolve_auth_tuple(
-    auth: Optional[Union[str, os.PathLike, tuple]],
-    client_id: Optional[str],
-    client_secret: Optional[str],
-) -> Optional[Tuple[str, str]]:
-    """Resolve auth parameters to a (client_id, client_secret) tuple for caching."""
-
-    resolved_id, resolved_secret = resolve_credentials(auth, client_id, client_secret)
-    if resolved_id and resolved_secret:
-        return resolved_id, resolved_secret
-    return None
-
-
-def create_session(
-    *,
-    auth: Optional[Union[str, os.PathLike, tuple]] = None,
-    auth_host: str = DEFAULT_HOST,
-    auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
-    client_name: Optional[str] = None,
-    json_serializer: Callable[[Any], Any] = serialize_body,
-) -> Session:
-    """Create a requests session with enhancements.
-
-    - OAuth2 authentication with automatic token refresh
-    - Automatic JSON serialization for jsonable objects
-    - Default retry logic for transient errors
-    - Sunset header handling
-    - Always call raise_for_status with enhanced error messages
-
-    Args:
-        auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
-        auth_host: Authentication server base URL
-        auth_token_endpoint: Relative path to token endpoint
-        client_name: Name added to User-Agent header
-        json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
-
-    Returns:
-        Configured requests Session
-    """
-    # Resolve credentials and get cached OAuth session
-    auth_tuple = _resolve_auth_tuple(auth, client_id=None, client_secret=None)
-    session = _create_cached_oauth_session(auth_tuple, auth_host, auth_token_endpoint)
-
+def _set_session_user_agent(session: Session, client_name: Optional[str] = None):
+    """Set the User-Agent header for the session, including the client name if provided."""
     session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", client_name)
 
-    session.mount("http://", HTTPAdapter(max_retries=DEFAULT_RETRY))
-    session.mount("https://", HTTPAdapter(max_retries=DEFAULT_RETRY))
 
-    # Monkey patch to serialize JSON and validate paths
+def _monkey_patch_send(session: Session, json_serializer: Callable[[Any], Any]):
+    """
+    Monkey patch to serialize JSON and validate paths
+    :param session:
+    :param json_serializer:
+    :return:
+    """
     vanilla_prep = session.prepare_request
 
     def prepare_request(req, *args, **kwargs):
@@ -137,6 +81,52 @@ def create_session(
         return resp
 
     session.send = send_request
+
+
+def create_session(
+    *,
+    auth: Optional[Union[str, os.PathLike, tuple]] = None,
+    auth_host: str = DEFAULT_HOST,
+    auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+    client_name: Optional[str] = None,
+    json_serializer: Callable[[Any], Any] = serialize_body,
+    initial_token: Optional[dict] = None,
+    on_token_updated: Optional[Callable[[dict], None]] = None,
+) -> Session:
+    """Create a requests session with enhancements.
+
+    - OAuth2 authentication with automatic token refresh
+    - Automatic JSON serialization for jsonable objects
+    - Default retry logic for transient errors
+    - Sunset header handling
+    - Always call raise_for_status with enhanced error messages
+
+    Args:
+        auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
+        auth_host: Authentication server base URL
+        auth_token_endpoint: Relative path to token endpoint
+        client_name: Name added to User-Agent header
+        json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
+        initial_token: Pre-fetched token dict to inject, skipping the initial network fetch if valid.
+        on_token_updated: Callback invoked with the new token dict whenever a fresh token is fetched.
+
+    Returns:
+        Configured requests Session
+    """
+    session = RequestsAuthSession(
+        auth=auth,
+        host=auth_host,
+        token_endpoint=auth_token_endpoint,
+        initial_token=initial_token,
+        on_token_updated=on_token_updated,
+    ).session
+
+    _set_session_user_agent(session, client_name)
+    _monkey_patch_send(session, json_serializer)
+
+    session.mount("http://", HTTPAdapter(max_retries=DEFAULT_RETRY))
+    session.mount("https://", HTTPAdapter(max_retries=DEFAULT_RETRY))
+
     return session
 
 

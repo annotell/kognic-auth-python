@@ -41,7 +41,8 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
         "--token-cache",
         choices=["auto", "keyring", "file", "none"],
         default="auto",
-        help="Token cache backend: auto (default), keyring, file, or none",
+        help="Token cache backend: auto (default), keyring, file, or none. "
+        "Auto will use keyring if available, otherwise file-based caching.",
     )
 
 
@@ -53,8 +54,9 @@ def run(parsed: argparse.Namespace) -> int:
         if parsed.env_name:
             config = load_kognic_env_config(parsed.env_config_file_path)
             if parsed.env_name not in config.environments:
-                print(f"Error: Unknown environment: {parsed.env_name}", file=sys.stderr)
-                return 1
+                raise ValueError(
+                    f"Environment '{parsed.env_name}' not found in config file '{parsed.env_config_file_path}'"
+                )
             ctx = config.environments[parsed.env_name]
             if host is None:
                 host = ctx.auth_server
@@ -64,34 +66,15 @@ def run(parsed: argparse.Namespace) -> int:
         auth_host = host or DEFAULT_HOST
 
         cache = make_cache(parsed.token_cache)
-        if cache is not None:
-            try:
-                client_id, _ = resolve_credentials(credentials)
-            except Exception:
-                client_id = None
-
-            if client_id:
-                cached = cache.load(auth_host, client_id)
-                if cached:
-                    print(cached["access_token"])
-                    return 0
-
-        session = RequestsAuthSession(
-            auth=credentials,
+        client_id, client_secret = resolve_credentials(credentials)
+        auth_session = RequestsAuthSession(
+            auth=(client_id, client_secret),
             host=auth_host,
+            initial_token=cache.load(auth_host, client_id) if (cache and client_id) else None,
+            on_token_updated=(lambda t: cache.save(auth_host, client_id, t)) if (cache and client_id) else None,
         )
-        # Access .session to trigger token fetch
-        _ = session.session
-
-        # Save the freshly fetched token to the cache
-        if cache is not None:
-            token = session.token
-            if isinstance(token, dict):
-                cid = session.oauth_session.client_id
-                if cid:
-                    cache.save(auth_host, cid, token)
-
-        print(session.access_token)
+        _ = auth_session.session  # trigger fetch if no valid initial_token
+        print(auth_session.access_token)
         return 0
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
