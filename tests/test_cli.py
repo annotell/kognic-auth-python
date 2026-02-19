@@ -193,9 +193,7 @@ class CliMainTest(unittest.TestCase):
         mock_session_class.return_value = mock_session
 
         with mock.patch("builtins.print"):
-            result = main(
-                ["get-access-token", "--env", "demo", "--server", "https://custom.server", "--no-cache"]
-            )
+            result = main(["get-access-token", "--env", "demo", "--server", "https://custom.server", "--no-cache"])
 
         self.assertEqual(result, 0)
         mock_session_class.assert_called_once_with(
@@ -1002,9 +1000,7 @@ class CallApiTest(unittest.TestCase):
             credentials="/path/to/demo-creds.json",
         )
 
-        with mock.patch(
-            "kognic.auth.cli.api_request._create_authenticated_session"
-        ) as mock_create_session:
+        with mock.patch("kognic.auth.cli.api_request._create_authenticated_session") as mock_create_session:
             mock_session = mock.MagicMock()
             mock_response = mock.MagicMock()
             mock_response.ok = True
@@ -1068,8 +1064,9 @@ class KogCacheTest(unittest.TestCase):
         mock_session_class.return_value = mock_auth_session
 
         parser = create_kog_parser()
-        parsed = parser.parse_args(["get", "https://app.kognic.com/v1/projects",
-                                    "--env-config-file-path", "/nonexistent/config.json"])
+        parsed = parser.parse_args(
+            ["get", "https://app.kognic.com/v1/projects", "--env-config-file-path", "/nonexistent/config.json"]
+        )
         with mock.patch("builtins.print"):
             result = call_run(parsed)
 
@@ -1097,8 +1094,15 @@ class KogCacheTest(unittest.TestCase):
         mock_create_session.return_value = mock_session
 
         parser = create_kog_parser()
-        parsed = parser.parse_args(["get", "https://app.kognic.com/v1/projects",
-                                    "--env-config-file-path", "/nonexistent/config.json", "--no-cache"])
+        parsed = parser.parse_args(
+            [
+                "get",
+                "https://app.kognic.com/v1/projects",
+                "--env-config-file-path",
+                "/nonexistent/config.json",
+                "--no-cache",
+            ]
+        )
         with mock.patch("builtins.print"):
             call_run(parsed)
 

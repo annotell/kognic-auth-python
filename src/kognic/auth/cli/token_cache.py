@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
 
-from kognic.auth.env_config import _DEFAULT_CACHE_PATH
+from kognic.auth import DEFAULT_CACHE_PATH
 
 log = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ class KeyringTokenCache(TokenCache):
 class FileTokenCache(TokenCache):
     """Token cache backed by a JSON file on disk."""
 
-    def __init__(self, path: Path = _DEFAULT_CACHE_PATH) -> None:
+    def __init__(self, path: Path = DEFAULT_CACHE_PATH) -> None:
         self.path = path
 
     def _load_all(self) -> dict:
