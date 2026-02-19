@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 import requests
 from requests import Session
 from requests.adapters import HTTPAdapter, Retry
-from requests.auth import AuthBase
 
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import handle_sunset
@@ -23,6 +22,7 @@ from kognic.auth._user_agent import get_user_agent
 from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.requests.auth_session import RequestsAuthSession
+from kognic.auth.requests.bearer_auth import KognicBearerAuth
 from kognic.auth.serde import serialize_body
 
 logger = logging.getLogger(__name__)
@@ -48,32 +48,6 @@ def _check_response(resp: requests.Response):
             response=resp,
             request=resp.request,
         ) from e
-
-
-class _KognicBearerAuth(AuthBase):
-    """Injects a Bearer token from a RequestsAuthSession into each request.
-
-    Handles 401 responses by invalidating the cached token and retrying once.
-    """
-
-    def __init__(self, provider: RequestsAuthSession) -> None:
-        self._provider = provider
-
-    def __call__(self, r: requests.PreparedRequest) -> requests.PreparedRequest:
-        r.headers["Authorization"] = f"Bearer {self._provider.ensure_token()['access_token']}"
-        r.register_hook("response", self._handle_401)
-        return r
-
-    def _handle_401(self, r: requests.Response, **kwargs) -> requests.Response:
-        if r.status_code != 401:
-            return r
-        self._provider.invalidate_token()
-        _ = r.content  # drain socket so connection can be reused
-        prep = r.request.copy()
-        prep.headers["Authorization"] = f"Bearer {self._provider.ensure_token()['access_token']}"
-        _r = r.connection.send(prep, **kwargs)
-        _r.history.append(r)
-        return _r
 
 
 def _set_session_user_agent(session: Session, client_name: Optional[str] = None):
@@ -156,7 +130,7 @@ def create_session(
         )
 
     session = requests.Session()
-    session.auth = _KognicBearerAuth(token_provider)
+    session.auth = KognicBearerAuth(token_provider)
     _set_session_user_agent(session, client_name)
     _monkey_patch_send(session, json_serializer)
     session.mount("http://", HTTPAdapter(max_retries=DEFAULT_RETRY))
