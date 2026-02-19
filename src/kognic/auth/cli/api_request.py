@@ -164,11 +164,6 @@ def _print_response(response: Any, *, output_format: str = "json") -> None:
         print(response.text)
 
 
-def _create_authenticated_session(*, auth, auth_host, cache_mode: str = "auto"):
-    provider = make_token_provider(auth=auth, auth_host=auth_host, token_cache=make_cache(cache_mode))
-    return create_session(token_provider=provider)
-
-
 def run(parsed: argparse.Namespace) -> int:
     try:
         headers = _parse_headers(parsed.headers) or {}
@@ -177,11 +172,10 @@ def run(parsed: argparse.Namespace) -> int:
         config = load_kognic_env_config(parsed.env_config_file_path)
         env = resolve_environment(config, parsed.url, parsed.env_name)
 
-        session = _create_authenticated_session(
-            auth=env.credentials,
-            auth_host=env.auth_server,
-            cache_mode=parsed.token_cache,
+        provider = make_token_provider(
+            auth=env.credentials, auth_host=env.auth_server, token_cache=make_cache(parsed.token_cache)
         )
+        session = create_session(token_provider=provider)
 
         response = session.request(
             method=parsed.method.upper(),
