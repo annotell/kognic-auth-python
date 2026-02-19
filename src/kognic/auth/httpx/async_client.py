@@ -66,7 +66,7 @@ class HttpxAuthAsyncClient(AuthClient):
         self._log_new_token()
 
     @property
-    async def session(self) -> AsyncOAuth2Client:
+    async def session(self) -> httpx.AsyncClient:
         if not self.token:
             async with self._lock:
                 # check again when coming out of the lock that the token is still not set
