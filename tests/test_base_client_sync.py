@@ -192,5 +192,141 @@ class TestBaseApiClientFromEnv(unittest.TestCase):
             Path(config_path).unlink()
 
 
+class TestProviderPool(unittest.TestCase):
+    def setUp(self):
+        import kognic.auth.requests.base_client as bc
+
+        bc._provider_pool.clear()
+
+    def tearDown(self):
+        import kognic.auth.requests.base_client as bc
+
+        bc._provider_pool.clear()
+
+    def _make_clients(self, mock_session, n=2, **kwargs):
+        from kognic.auth.requests.base_client import BaseApiClient
+
+        clients = [BaseApiClient(**kwargs) for _ in range(n)]
+        for c in clients:
+            _ = c.session
+        return clients
+
+    @patch("kognic.auth.requests.base_client.requests.Session")
+    @patch("kognic.auth.requests.base_client.RequestsAuthSession")
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=("id1", "secret1"))
+    def test_same_credentials_share_provider(self, _resolve, mock_ras, mock_session):
+        self._make_clients(mock_session, n=2, auth=("id1", "secret1"))
+
+        mock_ras.assert_called_once()
+        self.assertEqual(len(mock_session.return_value.mount.call_args_list), 4)  # 2x per session
+
+    @patch("kognic.auth.requests.base_client.requests.Session")
+    @patch("kognic.auth.requests.base_client.RequestsAuthSession")
+    @patch(
+        "kognic.auth.requests.base_client.resolve_credentials",
+        side_effect=lambda auth, *a, **kw: auth,
+    )
+    def test_different_credentials_get_different_providers(self, _resolve, mock_ras, mock_session):
+        from kognic.auth.requests.base_client import BaseApiClient
+
+        c1 = BaseApiClient(auth=("id1", "secret1"))
+        c2 = BaseApiClient(auth=("id2", "secret2"))
+        _ = c1.session
+        _ = c2.session
+
+        self.assertEqual(mock_ras.call_count, 2)
+
+    @patch("kognic.auth.requests.base_client.requests.Session")
+    @patch("kognic.auth.requests.base_client.RequestsAuthSession")
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=("id1", "secret1"))
+    def test_different_auth_host_gets_different_provider(self, _resolve, mock_ras, mock_session):
+        from kognic.auth.requests.base_client import BaseApiClient
+
+        c1 = BaseApiClient(auth=("id1", "secret1"), auth_host="https://auth.a.kognic.com")
+        c2 = BaseApiClient(auth=("id1", "secret1"), auth_host="https://auth.b.kognic.com")
+        _ = c1.session
+        _ = c2.session
+
+        self.assertEqual(mock_ras.call_count, 2)
+
+    @patch("kognic.auth.requests.base_client.requests.Session")
+    @patch("kognic.auth.requests.base_client.RequestsAuthSession")
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=("id1", "secret1"))
+    def test_cache_type_is_part_of_pool_key(self, _resolve, mock_ras, mock_session):
+        from kognic.auth.internal.token_cache import FileTokenCache
+        from kognic.auth.requests.base_client import BaseApiClient
+
+        c1 = BaseApiClient(auth=("id1", "secret1"))
+        c2 = BaseApiClient(auth=("id1", "secret1"), token_cache=FileTokenCache())
+        _ = c1.session
+        _ = c2.session
+
+        self.assertEqual(mock_ras.call_count, 2)
+
+    @patch("kognic.auth.requests.base_client.requests.Session")
+    @patch("kognic.auth.requests.base_client.RequestsAuthSession")
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=("id1", "secret1"))
+    def test_explicit_token_provider_bypasses_pool(self, mock_resolve, mock_ras, mock_session):
+        from kognic.auth.requests.base_client import BaseApiClient, _provider_pool
+
+        explicit = MagicMock()
+        client = BaseApiClient(auth=("id1", "secret1"), token_provider=explicit)
+        _ = client.session
+
+        self.assertEqual(len(_provider_pool), 0)
+        mock_ras.assert_not_called()
+        mock_resolve.assert_not_called()
+
+    @patch("kognic.auth.requests.base_client.requests.Session")
+    @patch("kognic.auth.requests.base_client.RequestsAuthSession")
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=("id1", "secret1"))
+    def test_pool_entry_alive_while_client_referenced(self, _resolve, mock_ras, mock_session):
+        from kognic.auth.requests.base_client import (
+            DEFAULT_HOST,
+            DEFAULT_TOKEN_ENDPOINT_RELPATH,
+            BaseApiClient,
+            _provider_pool,
+        )
+
+        client = BaseApiClient(auth=("id1", "secret1"))
+        _ = client.session
+
+        pool_key = ("id1", DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH, type(None))
+        self.assertIn(pool_key, _provider_pool)
+        _ = client  # keep alive
+
+    def test_provider_gc_when_all_clients_deleted(self):
+        import gc
+        import weakref
+
+        from kognic.auth.requests.base_client import (
+            DEFAULT_HOST,
+            DEFAULT_TOKEN_ENDPOINT_RELPATH,
+            BaseApiClient,
+            _provider_pool,
+        )
+
+        # Use side_effect so each call returns a fresh object with no external strong references
+        with patch(
+            "kognic.auth.requests.base_client.resolve_credentials",
+            return_value=("id-gc", "secret-gc"),
+        ):
+            with patch(
+                "kognic.auth.requests.base_client.RequestsAuthSession",
+                side_effect=lambda **kw: MagicMock(),
+            ):
+                client = BaseApiClient(auth=("id-gc", "secret-gc"))
+                session = client.session
+                pool_key = ("id-gc", DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH, type(None))
+                provider_ref = weakref.ref(_provider_pool[pool_key])
+                self.assertIsNotNone(provider_ref())
+
+                del session, client
+                gc.collect()
+                gc.collect()  # two passes for cycles from _monkey_patch_send closures
+
+                self.assertIsNone(provider_ref())
+
+
 if __name__ == "__main__":
     unittest.main()
