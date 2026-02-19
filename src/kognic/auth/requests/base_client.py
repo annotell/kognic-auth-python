@@ -21,6 +21,7 @@ from kognic.auth._sunset import handle_sunset
 from kognic.auth._user_agent import get_user_agent
 from kognic.auth.credentials_parser import resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
+from kognic.auth.internal.token_cache import TokenCache
 from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.requests.bearer_auth import KognicBearerAuth
 from kognic.auth.serde import serialize_body
@@ -146,11 +147,12 @@ def _get_shared_provider(
     auth: Optional[Union[str, os.PathLike, tuple]],
     auth_host: str,
     auth_token_endpoint: str,
+    token_cache: Optional[TokenCache] = None,
 ) -> RequestsAuthSession:
     """Return a shared RequestsAuthSession for the given credentials, creating one if needed.
 
-    Providers are keyed by (client_id, auth_host, auth_token_endpoint) and held weakly,
-    so they are GC'd once no BaseApiClient instances reference them.
+    Providers are keyed by (client_id, auth_host, auth_token_endpoint, cache_type) and held
+    weakly, so they are GC'd once no BaseApiClient instances reference them.
     """
     try:
         client_id, client_secret = resolve_credentials(auth)
@@ -160,7 +162,7 @@ def _get_shared_provider(
     if not client_id or not client_secret:
         return RequestsAuthSession(auth=auth, host=auth_host, token_endpoint=auth_token_endpoint)
 
-    key = (client_id, auth_host, auth_token_endpoint)
+    key = (client_id, auth_host, auth_token_endpoint, type(token_cache))
     with _provider_pool_lock:
         provider = _provider_pool.get(key)
         if provider is None:
@@ -168,6 +170,8 @@ def _get_shared_provider(
                 auth=(client_id, client_secret),
                 host=auth_host,
                 token_endpoint=auth_token_endpoint,
+                initial_token=token_cache.load(auth_host, client_id) if token_cache else None,
+                on_token_updated=(lambda t: token_cache.save(auth_host, client_id, t)) if token_cache else None,
             )
             _provider_pool[key] = provider
     return provider
@@ -204,6 +208,7 @@ class BaseApiClient:
         client_name: Optional[str] = "auto",
         json_serializer: Callable[[Any], Any] = serialize_body,
         token_provider: Optional[RequestsAuthSession] = None,
+        token_cache: Optional[TokenCache] = None,
     ):
         """Initialize the API client.
 
@@ -215,6 +220,8 @@ class BaseApiClient:
             json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
             token_provider: Explicit token provider to share across clients. When omitted, a shared
                 provider is looked up (or created) by credentials + auth_host.
+            token_cache: Token cache for cross-process token persistence. When given, a valid cached
+                token is injected on startup and new tokens are saved automatically.
         """
         self._session: Optional[Session] = None
         self._auth = auth
@@ -222,6 +229,7 @@ class BaseApiClient:
         self._auth_token_endpoint = auth_token_endpoint
         self._json_serializer = json_serializer
         self._token_provider = token_provider
+        self._token_cache = token_cache
         self._lock = Lock()
 
         if client_name == "auto":
@@ -238,7 +246,7 @@ class BaseApiClient:
             with self._lock:
                 if self._session is None:
                     provider = self._token_provider or _get_shared_provider(
-                        self._auth, self._auth_host, self._auth_token_endpoint
+                        self._auth, self._auth_host, self._auth_token_endpoint, self._token_cache
                     )
                     self._session = create_session(
                         token_provider=provider,
