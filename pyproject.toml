@@ -59,7 +59,6 @@ full = [
 dev = [
     "httpx>=0.20,<1",
     "requests>=2.20,<3",
-    "pydantic>=2",
     "pytest",
     "keyring>=23.0",
 ]
