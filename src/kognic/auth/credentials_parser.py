@@ -100,7 +100,7 @@ def resolve_credentials(
             else:
                 raise ValueError(
                     f"No credentials found in keyring for profile '{profile}'. "
-                    f"Run 'kognic-auth credentials load <file> --env {profile}' to store them."
+                    f"Run 'kognic-auth credentials put <file> --env {profile}' to store them."
                 )
         elif not path.endswith(".json"):
             raise ValueError(f"Bad auth credentials file, must be json: {path}")
