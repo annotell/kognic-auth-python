@@ -5,9 +5,9 @@ import logging
 import sys
 from types import ModuleType
 
-from kognic.auth.cli import get_access_token
+from kognic.auth.cli import credentials, get_access_token
 
-_SUBCOMMANDS: list[ModuleType] = [get_access_token]
+_SUBCOMMANDS: list[ModuleType] = [get_access_token, credentials]
 
 
 def create_parser() -> argparse.ArgumentParser:

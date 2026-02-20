@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
+from kognic.auth.internal import credentials_store
+
 ANY_AUTH_TYPE = Union[str, os.PathLike, tuple, "ApiCredentials", dict, None]
 
 REQUIRED_CREDENTIALS_FILE_KEYS = [
@@ -58,6 +60,13 @@ def get_credentials_from_env() -> tuple[Optional[str], Optional[str]]:
     client_id = os.getenv("KOGNIC_CLIENT_ID")
     client_secret = os.getenv("KOGNIC_CLIENT_SECRET")
 
+    if client_id and client_secret:
+        return client_id, client_secret
+
+    keyring_creds = credentials_store.load_credentials()
+    if keyring_creds:
+        return keyring_creds.client_id, keyring_creds.client_secret
+
     return client_id, client_secret
 
 
@@ -83,12 +92,24 @@ def resolve_credentials(
         client_secret = creds.client_secret
     elif isinstance(auth, (str, os.PathLike)):
         path = str(auth)
-        if not path.endswith(".json"):
+        if path.startswith("keyring://"):
+            profile = path[len("keyring://") :]
+            keyring_creds = credentials_store.load_credentials(profile)
+            if keyring_creds:
+                client_id, client_secret = keyring_creds.client_id, keyring_creds.client_secret
+            else:
+                raise ValueError(
+                    f"No credentials found in keyring for profile '{profile}'. "
+                    f"Run 'kognic-auth credentials load <file> --env {profile}' to store them."
+                )
+        elif not path.endswith(".json"):
             raise ValueError(f"Bad auth credentials file, must be json: {path}")
-        creds = parse_credentials(auth)
-        client_id = creds.client_id
-        client_secret = creds.client_secret
+        else:
+            creds = parse_credentials(auth)
+            client_id = creds.client_id
+            client_secret = creds.client_secret
     elif auth is not None:
+        # unreasonable type, but we want to be defensive in case of user error
         raise ValueError(f"Unsupported auth type: {type(auth)}")
 
     if not client_id and not client_secret:

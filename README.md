@@ -13,8 +13,9 @@ There are a few ways to set your credentials in `auth`.
 1. Set the environment variable `KOGNIC_CREDENTIALS` to point to your Api Credentials file.
 The credentials will contain the Client Id and Client Secret.
 2. Set to the credentials file path like `auth="~/.config/kognic/credentials.json"`
-3. Set environment variables `KOGNIC_CLIENT_ID` and`KOGNIC_CLIENT_SECRET`
+3. Set environment variables `KOGNIC_CLIENT_ID` and `KOGNIC_CLIENT_SECRET`
 4. Set to credentials tuple `auth=(client_id, client_secret)`
+5. Store credentials in the system keyring (see [Storing credentials in the keyring](#storing-credentials-in-the-keyring))
 
 API clients such as the `InputApiClient` accept this `auth` parameter.
 
@@ -61,9 +62,12 @@ The CLI can be configured with a JSON file at `~/.config/kognic/environments.jso
 ```
 
 Each environment has the following fields:
-- `host` - The API hostname, used by `call` to automatically match an environment based on the request URL.
+- `host` - The API hostname, used by `kog` to automatically match an environment based on the request URL.
 - `auth_server` - The OAuth server URL used to fetch tokens.
-- `credentials` *(optional)* - Path to a JSON credentials file. Tilde (`~`) is expanded. If omitted, credentials are read from environment variables.
+- `credentials` *(optional)* - Where to load credentials from. Three formats are supported:
+  - A file path: `"~/.config/kognic/credentials-prod.json"` (tilde `~` is expanded)
+  - A keyring reference: `"keyring://production"` (loads from the system keyring under the named profile)
+  - Omit entirely: credentials are read from environment variables or the keyring `default` profile
 
 `default_environment` specifies which environment to use as a fallback when no `--env` flag is given and no URL match is found.
 
@@ -97,6 +101,82 @@ kognic-auth get-access-token --env demo
 # Using an environment but overriding the server
 kognic-auth get-access-token --env demo --server https://custom.server
 ```
+
+### credentials
+
+Manage credentials stored in the system keyring. This is the recommended way to store credentials on a developer machine — more secure than a credentials file and no environment variables needed.
+
+```bash
+kognic-auth credentials load FILE [--env ENV]
+kognic-auth credentials clear [--env ENV]
+```
+
+**`load`** — reads a Kognic credentials JSON file and stores the `client_id` and `client_secret` in the system keyring.
+
+- `FILE` - Path to a Kognic credentials JSON file (the same format accepted by `--credentials`)
+- `--env` - Profile name to store under (default: `default`). Use the environment name from `environments.json` to link the credentials to that environment.
+
+**`clear`** — removes credentials from the keyring for the given profile.
+
+**Examples:**
+```bash
+# Store credentials under the default profile (used as fallback when no credentials are configured)
+kognic-auth credentials load ~/Downloads/credentials.json
+
+# Store per-environment credentials
+kognic-auth credentials load ~/Downloads/prod-creds.json --env production
+kognic-auth credentials load ~/Downloads/demo-creds.json --env demo
+
+# Remove credentials
+kognic-auth credentials clear --env demo
+```
+
+### Storing credentials in the keyring
+
+The system keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager, etc.) is the recommended place to keep credentials on a developer machine. No credentials files on disk, no environment variables in shell profiles.
+
+**Single-environment setup** — store once, works everywhere:
+```bash
+kognic-auth credentials load ~/Downloads/credentials.json
+# All CLI commands and the SDK will now find credentials automatically
+```
+
+**Multi-environment setup** — store per-environment credentials and reference them in `environments.json`:
+```bash
+kognic-auth credentials load ~/Downloads/prod-creds.json --env production
+kognic-auth credentials load ~/Downloads/demo-creds.json --env demo
+```
+
+Then in `~/.config/kognic/environments.json`, reference the keyring profiles with `keyring://`:
+```json
+{
+  "default_environment": "production",
+  "environments": {
+    "production": {
+      "host": "app.kognic.com",
+      "auth_server": "https://auth.app.kognic.com",
+      "credentials": "keyring://production"
+    },
+    "demo": {
+      "host": "demo.kognic.com",
+      "auth_server": "https://auth.demo.kognic.com",
+      "credentials": "keyring://demo"
+    }
+  }
+}
+```
+
+Now `kog get https://app.kognic.com/v1/projects` automatically picks up the `production` keyring credentials, and `kog get https://demo.kognic.com/v1/projects` picks up `demo`.
+
+The `keyring://` URI also works in the `auth` parameter of API clients:
+```python
+client = BaseApiClient(auth="keyring://production")
+```
+
+**Credential resolution order** — when no explicit `auth` is provided, the SDK tries sources in this order:
+1. `KOGNIC_CREDENTIALS` environment variable (path to credentials JSON file)
+2. `KOGNIC_CLIENT_ID` + `KOGNIC_CLIENT_SECRET` environment variables
+3. System keyring, `default` profile
 
 ### kog
 

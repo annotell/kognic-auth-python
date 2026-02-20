@@ -59,10 +59,31 @@ class TestParseCredentials(unittest.TestCase):
 
 class TestGetCredentialsFromEnv(unittest.TestCase):
     @patch.dict(os.environ, {}, clear=True)
-    def test_no_env_vars_returns_none(self):
+    @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
+    def test_no_env_vars_returns_none(self, _):
         client_id, client_secret = get_credentials_from_env()
         self.assertIsNone(client_id)
         self.assertIsNone(client_secret)
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch(
+        "kognic.auth.credentials_parser.credentials_store.load_credentials",
+        return_value=ApiCredentials(
+            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i"
+        ),
+    )
+    def test_falls_back_to_keyring(self, _):
+        client_id, client_secret = get_credentials_from_env()
+        self.assertEqual(client_id, "kr_id")
+        self.assertEqual(client_secret, "kr_secret")
+
+    @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id", "KOGNIC_CLIENT_SECRET": "env_secret"}, clear=True)
+    @patch("kognic.auth.credentials_parser.credentials_store.load_credentials")
+    def test_env_vars_take_precedence_over_keyring(self, mock_load):
+        client_id, client_secret = get_credentials_from_env()
+        self.assertEqual(client_id, "env_id")
+        self.assertEqual(client_secret, "env_secret")
+        mock_load.assert_not_called()
 
     @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id", "KOGNIC_CLIENT_SECRET": "env_secret"}, clear=True)
     def test_client_id_and_secret_env_vars(self):
@@ -173,6 +194,24 @@ class TestResolveCredentials(unittest.TestCase):
         client_id, client_secret = resolve_credentials(auth=VALID_CREDENTIALS_DICT)
         self.assertEqual(client_id, "test_id")
         self.assertEqual(client_secret, "test_secret")
+
+    @patch(
+        "kognic.auth.credentials_parser.credentials_store.load_credentials",
+        return_value=ApiCredentials(
+            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i"
+        ),
+    )
+    def test_auth_keyring_uri(self, mock_load):
+        client_id, client_secret = resolve_credentials(auth="keyring://myprofile")
+        self.assertEqual(client_id, "kr_id")
+        self.assertEqual(client_secret, "kr_secret")
+        mock_load.assert_called_once_with("myprofile")
+
+    @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
+    def test_auth_keyring_uri_not_found_raises(self, _):
+        with self.assertRaises(ValueError) as ctx:
+            resolve_credentials(auth="keyring://missing-profile")
+        self.assertIn("missing-profile", str(ctx.exception))
 
 
 if __name__ == "__main__":

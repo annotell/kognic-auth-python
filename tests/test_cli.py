@@ -1,6 +1,7 @@
 import json
 import time
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from kognic.auth import DEFAULT_HOST
@@ -1115,6 +1116,81 @@ class KogCacheTest(unittest.TestCase):
             auth_host="https://auth.app.kognic.com",
             token_cache=mock_cache,
         )
+
+
+class CredentialsCommandTest(unittest.TestCase):
+    def test_load_stores_credentials(self):
+        import json
+        import tempfile
+
+        creds = {
+            "clientId": "test-client-id",
+            "clientSecret": "test-secret",
+            "email": "test@kognic.com",
+            "userId": 1,
+            "issuer": "auth.kognic.test",
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(creds, f)
+            path = f.name
+
+        try:
+            with mock.patch("kognic.auth.cli.credentials.save_credentials") as mock_save:
+                result = main(["credentials", "load", path])
+            self.assertEqual(result, 0)
+            args, kwargs = mock_save.call_args
+            self.assertEqual(args[0].client_id, "test-client-id")
+            self.assertEqual(args[0].client_secret, "test-secret")
+            self.assertEqual(args[1], "default")
+        finally:
+            Path(path).unlink()
+
+    def test_load_custom_profile(self):
+        import json
+        import tempfile
+
+        creds = {
+            "clientId": "id",
+            "clientSecret": "secret",
+            "email": "e@kognic.com",
+            "userId": 1,
+            "issuer": "issuer",
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(creds, f)
+            path = f.name
+
+        try:
+            with mock.patch("kognic.auth.cli.credentials.save_credentials") as mock_save:
+                result = main(["credentials", "load", path, "--env", "demo"])
+            self.assertEqual(result, 0)
+            args, kwargs = mock_save.call_args
+            self.assertEqual(args[0].client_id, "id")
+            self.assertEqual(args[0].client_secret, "secret")
+            self.assertEqual(args[1], "demo")
+        finally:
+            Path(path).unlink()
+
+    def test_load_missing_file_returns_error(self):
+        result = main(["credentials", "load", "/nonexistent/creds.json"])
+        self.assertEqual(result, 1)
+
+    def test_clear_removes_credentials(self):
+        with mock.patch("kognic.auth.cli.credentials.clear_credentials") as mock_clear:
+            result = main(["credentials", "clear"])
+        self.assertEqual(result, 0)
+        mock_clear.assert_called_once_with("default")
+
+    def test_clear_custom_profile(self):
+        with mock.patch("kognic.auth.cli.credentials.clear_credentials") as mock_clear:
+            result = main(["credentials", "clear", "--env", "demo"])
+        self.assertEqual(result, 0)
+        mock_clear.assert_called_once_with("demo")
+
+    def test_no_subcommand_prints_help(self):
+        with mock.patch("builtins.print"):
+            result = main(["credentials"])
+        self.assertEqual(result, 0)
 
 
 if __name__ == "__main__":
