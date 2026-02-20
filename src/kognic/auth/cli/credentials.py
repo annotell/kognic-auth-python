@@ -22,7 +22,7 @@ def register_parser(subparsers: argparse._SubParsersAction) -> argparse.Argument
     )
     subs = parser.add_subparsers(dest="credentials_action")
 
-    put_p = subs.add_parser("put", help="Store credentials from a JSON file into the system keyring")
+    put_p = subs.add_parser("put", help="Put credentials from a JSON file into the system keyring")
     put_p.add_argument("file", metavar="FILE", help="Path to credentials JSON file")
     put_p.add_argument(
         "--env",
@@ -33,7 +33,7 @@ def register_parser(subparsers: argparse._SubParsersAction) -> argparse.Argument
         "(e.g. --env production → use 'keyring://production' in your config).",
     )
 
-    get_p = subs.add_parser("get", help="Read stored credentials from the system keyring")
+    get_p = subs.add_parser("get", help="Get stored credentials from the system keyring")
     get_p.add_argument(
         "--env",
         default=DEFAULT_PROFILE,
@@ -41,7 +41,7 @@ def register_parser(subparsers: argparse._SubParsersAction) -> argparse.Argument
         help=f"Keyring profile name to read credentials from (default: {DEFAULT_PROFILE}).",
     )
 
-    clear_p = subs.add_parser("clear", help="Remove stored credentials from the system keyring")
+    clear_p = subs.add_parser("delete", help="Delete stored credentials from the system keyring")
     clear_p.add_argument(
         "--env",
         default=DEFAULT_PROFILE,
@@ -56,9 +56,9 @@ def run(parsed: argparse.Namespace) -> int:
     if parsed.credentials_action == "put":
         return _run_put(parsed)
     if parsed.credentials_action == "get":
-        return _run_read(parsed)
-    if parsed.credentials_action == "clear":
-        return _run_clear(parsed)
+        return _run_get(parsed)
+    if parsed.credentials_action == "delete":
+        return _run_delete(parsed)
     return 0
 
 
@@ -79,7 +79,7 @@ def _run_put(parsed: argparse.Namespace) -> int:
         return 1
 
 
-def _run_read(parsed: argparse.Namespace) -> int:
+def _run_get(parsed: argparse.Namespace) -> int:
     try:
         creds = load_credentials(parsed.env)
         if creds is None:
@@ -99,7 +99,7 @@ def _run_read(parsed: argparse.Namespace) -> int:
         return 1
 
 
-def _run_clear(parsed: argparse.Namespace) -> int:
+def _run_delete(parsed: argparse.Namespace) -> int:
     try:
         clear_credentials(parsed.env)
         print(f"Credentials cleared from keyring (profile={parsed.env!r})")
