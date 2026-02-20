@@ -14,6 +14,19 @@ log = logging.getLogger(__name__)
 
 
 class _FixedSession(OAuth2Session):
+    """OAuth2Session that gracefully recovers from an expired refresh token.
+
+    Kognic's auth server issues a refresh token alongside the access token even
+    for the client_credentials grant.  When the access token expires, authlib
+    uses the refresh token to obtain a new one without a full re-authentication.
+    If the refresh token has itself expired, plain OAuth2Session raises and
+    propagates the error to every call site.
+
+    This subclass intercepts the `invalid_token` error from a failed refresh and
+    falls back to fetch_token() — a new client credentials grant — so the
+    session self-heals transparently.
+    """
+
     def refresh_token(self, url, **kwargs):
         try:
             super(_FixedSession, self).refresh_token(url, **kwargs)

@@ -2,13 +2,12 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 if TYPE_CHECKING:
     from ._protocols import Response, Url
 
 SUNSET_HEADER = "sunset-date"
-SUNSET_DIFF_THRESHOLD = 14 * 60 * 60 * 24  # two weeks
 
 # Expected formats of sunset date
 DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
@@ -16,26 +15,56 @@ DATETIME_FMT_NO_MICRO = "%Y-%m-%dT%H:%M:%SZ"
 
 logger = logging.getLogger(__name__)
 
+SunsetHandler = Callable[[datetime, str, str], None]
 
-def handle_sunset(response: "Response") -> None:
-    """Check for Sunset header and log warnings/errors.
+
+def default_sunset_handler(threshold_days: int = 14) -> SunsetHandler:
+    """Return a sunset handler that logs a warning or error based on time until sunset.
+
+    Args:
+        threshold_days: Days remaining before the sunset date at which the log level
+            escalates from warning to error. Defaults to 14.
+
+    Returns:
+        A callable ``(sunset_date, method, url) -> None`` that logs the deprecation notice.
+
+    Example::
+
+        from kognic.auth import default_sunset_handler
+        client = BaseApiClient(sunset_handler=default_sunset_handler(threshold_days=30))
+    """
+    threshold_seconds = threshold_days * 60 * 60 * 24
+
+    def handler(sunset_date: datetime, method: str, url: str) -> None:
+        now = datetime.now(tz=timezone.utc)
+        diff = sunset_date - now
+        log_method = logger.warning if diff.total_seconds() > threshold_seconds else logger.error
+        log_method(
+            f"Endpoint has been deprecated and will be removed at {sunset_date}. Please update your client. "
+            f"Endpoint: {method} {url}"
+        )
+
+    return handler
+
+
+_default_handler: SunsetHandler = default_sunset_handler()
+
+
+def handle_sunset(response: "Response", handler: Optional[SunsetHandler] = _default_handler) -> None:
+    """Check for Sunset header and invoke the handler if present.
 
     Args:
         response: The HTTP response object (requests.Response or httpx.Response)
+        handler: Callable invoked with ``(sunset_date, method, url)``. Pass ``None`` to disable.
     """
+    if handler is None:
+        return
     sunset_string = response.headers.get(SUNSET_HEADER)
     sunset_date = _parse_date(sunset_string) if sunset_string else None
     if not sunset_date:
-        return None
+        return
 
-    now = datetime.now(tz=timezone.utc)
-    diff = sunset_date - now
-
-    log_method = logger.warning if diff.total_seconds() > SUNSET_DIFF_THRESHOLD else logger.error
-    log_method(
-        f"Endpoint has been deprecated and will be removed at {sunset_date}. Please update your client. "
-        f"Endpoint: {response.request.method} {_parse_url(response.request.url)}"
-    )
+    handler(sunset_date, response.request.method, _parse_url(response.request.url))
 
 
 def _parse_date(date: str) -> Optional[datetime]:

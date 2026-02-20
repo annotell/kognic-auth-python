@@ -32,16 +32,7 @@ def _configure_logging(verbose: bool = False) -> None:
 
 
 def main(args: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="kognic-auth",
-        description="Kognic authentication CLI",
-    )
-    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Enable debug logging")
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    for subcommand in _SUBCOMMANDS:
-        subcommand.register_parser(subparsers)
-
+    parser = create_parser()
     parsed = parser.parse_args(args)
     _configure_logging(verbose=parsed.verbose)
 

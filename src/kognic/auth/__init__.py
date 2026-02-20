@@ -3,7 +3,11 @@ import os
 from logging import NullHandler
 from pathlib import Path
 
+from kognic.auth._sunset import SunsetHandler, default_sunset_handler
+
 logging.getLogger(__name__).addHandler(NullHandler())
+
+__all__ = ["SunsetHandler", "default_sunset_handler"]
 
 try:
     from ._version import __version__
