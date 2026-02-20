@@ -109,7 +109,7 @@ Manage credentials stored in the system keyring. This is the recommended way to 
 ```bash
 kognic-auth credentials put FILE [--env ENV]
 kognic-auth credentials get [--env ENV]
-kognic-auth credentials clear [--env ENV]
+kognic-auth credentials delete [--env ENV]
 ```
 
 **`put`** — reads a Kognic credentials JSON file and stores it in the system keyring.
@@ -121,7 +121,7 @@ kognic-auth credentials clear [--env ENV]
 
 - `--env` - Profile name to read (default: `default`).
 
-**`clear`** — removes credentials from the keyring for the given profile.
+**`delete`** — removes credentials from the keyring for the given profile.
 
 **Examples:**
 ```bash
@@ -137,7 +137,7 @@ kognic-auth credentials get
 kognic-auth credentials get --env production
 
 # Remove credentials
-kognic-auth credentials clear --env example
+kognic-auth credentials delete --env example
 ```
 
 ### Storing credentials in the keyring

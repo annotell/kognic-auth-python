@@ -1216,15 +1216,15 @@ class CredentialsCommandTest(unittest.TestCase):
             result = main(["credentials", "get"])
         self.assertEqual(result, 1)
 
-    def test_clear_removes_credentials(self):
+    def test_delete_removes_credentials(self):
         with mock.patch("kognic.auth.cli.credentials.clear_credentials") as mock_clear:
-            result = main(["credentials", "clear"])
+            result = main(["credentials", "delete"])
         self.assertEqual(result, 0)
         mock_clear.assert_called_once_with("default")
 
-    def test_clear_custom_profile(self):
+    def test_delete_custom_profile(self):
         with mock.patch("kognic.auth.cli.credentials.clear_credentials") as mock_clear:
-            result = main(["credentials", "clear", "--env", "demo"])
+            result = main(["credentials", "delete", "--env", "demo"])
         self.assertEqual(result, 0)
         mock_clear.assert_called_once_with("demo")
 
