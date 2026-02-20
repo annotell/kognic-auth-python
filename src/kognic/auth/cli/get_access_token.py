@@ -5,7 +5,8 @@ import sys
 
 from kognic.auth import DEFAULT_HOST
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
-from kognic.auth.requests.auth_session import RequestsAuthSession
+from kognic.auth.internal.token_cache import make_cache
+from kognic.auth.requests.base_client import make_token_provider
 
 COMMAND = "get-access-token"
 
@@ -35,6 +36,13 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
         dest="env_name",
         help="Use a specific environment from the config file",
     )
+    token_parser.add_argument(
+        "--token-cache",
+        choices=["auto", "keyring", "file", "none"],
+        default="auto",
+        help="Token cache backend: auto (default), keyring, file, or none. "
+        "Auto will use keyring if available, otherwise file-based caching.",
+    )
 
 
 def run(parsed: argparse.Namespace) -> int:
@@ -45,21 +53,23 @@ def run(parsed: argparse.Namespace) -> int:
         if parsed.env_name:
             config = load_kognic_env_config(parsed.env_config_file_path)
             if parsed.env_name not in config.environments:
-                print(f"Error: Unknown environment: {parsed.env_name}", file=sys.stderr)
-                return 1
+                raise ValueError(
+                    f"Environment '{parsed.env_name}' not found in config file '{parsed.env_config_file_path}'"
+                )
             ctx = config.environments[parsed.env_name]
             if host is None:
                 host = ctx.auth_server
             if credentials is None:
                 credentials = ctx.credentials
 
-        session = RequestsAuthSession(
+        auth_host = host or DEFAULT_HOST
+
+        provider = make_token_provider(
             auth=credentials,
-            host=host or DEFAULT_HOST,
+            auth_host=auth_host,
+            token_cache=make_cache(parsed.token_cache),
         )
-        # Access .session to trigger token fetch
-        _ = session.session
-        print(session.access_token)
+        print(provider.ensure_token()["access_token"])
         return 0
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)

@@ -15,6 +15,7 @@ def create_parser() -> argparse.ArgumentParser:
         prog="kognic-auth",
         description="Kognic authentication CLI",
     )
+    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Enable debug logging")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     for subcommand in _SUBCOMMANDS:
@@ -23,17 +24,17 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _configure_logging() -> None:
+def _configure_logging(verbose: bool = False) -> None:
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     logging.getLogger("kognic.auth").addHandler(handler)
-    logging.getLogger("kognic.auth").setLevel(logging.WARNING)
+    logging.getLogger("kognic.auth").setLevel(logging.DEBUG if verbose else logging.WARNING)
 
 
 def main(args: list[str] | None = None) -> int:
-    _configure_logging()
     parser = create_parser()
     parsed = parser.parse_args(args)
+    _configure_logging(verbose=parsed.verbose)
 
     for subcommand in _SUBCOMMANDS:
         if parsed.command == subcommand.COMMAND:

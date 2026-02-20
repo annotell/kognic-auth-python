@@ -5,9 +5,7 @@ from pathlib import Path
 from typing import Optional, Union
 from urllib.parse import urlparse
 
-from kognic.auth import DEFAULT_HOST
-
-DEFAULT_ENV_CONFIG_FILE_PATH = str(Path("~") / ".config" / "kognic" / "environments.json")
+from kognic.auth import DEFAULT_ENV_CONFIG_FILE_PATH, DEFAULT_HOST, DEFAULT_KOGNIC_PLATFORM
 
 
 @dataclass
@@ -87,7 +85,7 @@ def resolve_environment(config: KognicEnvConfig, url: str, env_name: Optional[st
     # No config at all — use default auth server with env var credentials
     return Environment(
         name="default",
-        host="app.kognic.com",
+        host=DEFAULT_KOGNIC_PLATFORM,
         auth_server=DEFAULT_HOST,
         credentials=None,
     )

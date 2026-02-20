@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Optional
+from typing import Callable, Optional
 
 import requests
 from authlib.common.errors import AuthlibBaseError
@@ -14,6 +14,19 @@ log = logging.getLogger(__name__)
 
 
 class _FixedSession(OAuth2Session):
+    """OAuth2Session that gracefully recovers from an expired refresh token.
+
+    Kognic's auth server issues a refresh token alongside the access token even
+    for the client_credentials grant.  When the access token expires, authlib
+    uses the refresh token to obtain a new one without a full re-authentication.
+    If the refresh token has itself expired, plain OAuth2Session raises and
+    propagates the error to every call site.
+
+    This subclass intercepts the `invalid_token` error from a failed refresh and
+    falls back to fetch_token() — a new client credentials grant — so the
+    session self-heals transparently.
+    """
+
     def refresh_token(self, url, **kwargs):
         try:
             super(_FixedSession, self).refresh_token(url, **kwargs)
@@ -44,6 +57,8 @@ class RequestsAuthSession(AuthClient):
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+        initial_token: Optional[dict] = None,
+        on_token_updated: Optional[Callable[[dict], None]] = None,
         **kwargs,
     ):
         """Initialize the auth session.
@@ -54,19 +69,25 @@ class RequestsAuthSession(AuthClient):
             client_secret: Client secret for authentication
             host: Base url for authentication server
             token_endpoint: Relative path to the token endpoint
+            initial_token: Pre-fetched token dict to inject, skipping the initial network fetch if valid.
+            on_token_updated: Callback invoked with the new token dict whenever a fresh token is fetched.
             **kwargs: Additional params to pass into Client Constructor
         """
         self.host = host
         self.token_url = f"{host}{token_endpoint}"
 
         client_id, client_secret = resolve_credentials(auth, client_id, client_secret)
+        self._client_id = client_id
+        self._on_token_updated = on_token_updated
 
         self.oauth_session = _FixedSession(
             client_id=client_id,
             client_secret=client_secret,
             token_endpoint_auth_method="client_secret_post",
+            grant_type="client_credentials",
             update_token=self._update_token,
             token_endpoint=self.token_url,
+            token=initial_token,
             **kwargs,
         )
         self.oauth_session.register_compliance_hook("access_token_response", AuthClient.check_rate_limit)
@@ -75,18 +96,32 @@ class RequestsAuthSession(AuthClient):
         self._lock = threading.RLock()
 
     @property
+    def client_id(self) -> Optional[str]:
+        return self._client_id
+
+    @property
     def token(self):
         return self.oauth_session.token
 
     def _update_token(self, token, access_token=None, refresh_token=None):
         self._log_new_token()
+        if self._on_token_updated is not None:
+            self._on_token_updated(token)
 
-    @property
-    def session(self):
+    def ensure_token(self) -> dict:
+        """Return a valid token, fetching one if needed. Thread-safe."""
         if not self.token:
             with self._lock:
                 if not self.token:
-                    # check again when coming out of the lock that the token is still not set
                     token = self.oauth_session.fetch_access_token(url=self.token_url)
                     self._update_token(token)
+        return self.token
+
+    def invalidate_token(self) -> None:
+        """Clear the cached token so the next ensure_token() call fetches a fresh one."""
+        self.oauth_session.token = None
+
+    @property
+    def session(self):
+        self.ensure_token()
         return self.oauth_session.session

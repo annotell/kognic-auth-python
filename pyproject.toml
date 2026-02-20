@@ -43,16 +43,25 @@ httpx = [
 requests = [
     "requests>=2.20,<3"
 ]
-full = [
-    "httpx>=0.20,<1",
+
+cli = [
+    "keyring>=23.0",
     "requests>=2.20,<3"
 ]
+
+full = [
+    "httpx>=0.20,<1",
+    "requests>=2.20,<3",
+    "keyring>=23.0"
+]
+
 [dependency-groups]
 dev = [
     "httpx>=0.20,<1",
     "requests>=2.20,<3",
     "pydantic>=2",
     "pytest",
+    "keyring>=23.0",
 ]
 
 [tool.ruff]

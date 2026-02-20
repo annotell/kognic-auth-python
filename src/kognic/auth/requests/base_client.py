@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
-from functools import lru_cache
+import threading
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from weakref import WeakValueDictionary
 
 if TYPE_CHECKING:
     from typing import Self
@@ -18,29 +19,14 @@ from requests.adapters import HTTPAdapter, Retry
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import handle_sunset
 from kognic.auth._user_agent import get_user_agent
-from kognic.auth.credentials_parser import resolve_credentials
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE, resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
+from kognic.auth.internal.token_cache import TokenCache
 from kognic.auth.requests.auth_session import RequestsAuthSession
+from kognic.auth.requests.bearer_auth import KognicBearerAuth
 from kognic.auth.serde import serialize_body
 
 logger = logging.getLogger(__name__)
-
-
-@lru_cache(maxsize=None)
-def _create_cached_oauth_session(
-    auth_tuple: Optional[Tuple[str, str]],
-    auth_host: str,
-    auth_token_endpoint: str,
-) -> Session:
-    """Create and cache an OAuth session by credentials.
-
-    Caching avoids creating multiple sessions for the same credentials.
-    """
-    return RequestsAuthSession(
-        auth=auth_tuple,
-        host=auth_host,
-        token_endpoint=auth_token_endpoint,
-    ).session
 
 
 DEFAULT_RETRY = Retry(total=3, connect=3, read=3, backoff_factor=0.5, status_forcelist=[502, 503, 504])
@@ -65,55 +51,18 @@ def _check_response(resp: requests.Response):
         ) from e
 
 
-def _resolve_auth_tuple(
-    auth: Optional[Union[str, os.PathLike, tuple]],
-    client_id: Optional[str],
-    client_secret: Optional[str],
-) -> Optional[Tuple[str, str]]:
-    """Resolve auth parameters to a (client_id, client_secret) tuple for caching."""
-
-    resolved_id, resolved_secret = resolve_credentials(auth, client_id, client_secret)
-    if resolved_id and resolved_secret:
-        return resolved_id, resolved_secret
-    return None
-
-
-def create_session(
-    *,
-    auth: Optional[Union[str, os.PathLike, tuple]] = None,
-    auth_host: str = DEFAULT_HOST,
-    auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
-    client_name: Optional[str] = None,
-    json_serializer: Callable[[Any], Any] = serialize_body,
-) -> Session:
-    """Create a requests session with enhancements.
-
-    - OAuth2 authentication with automatic token refresh
-    - Automatic JSON serialization for jsonable objects
-    - Default retry logic for transient errors
-    - Sunset header handling
-    - Always call raise_for_status with enhanced error messages
-
-    Args:
-        auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
-        auth_host: Authentication server base URL
-        auth_token_endpoint: Relative path to token endpoint
-        client_name: Name added to User-Agent header
-        json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
-
-    Returns:
-        Configured requests Session
-    """
-    # Resolve credentials and get cached OAuth session
-    auth_tuple = _resolve_auth_tuple(auth, client_id=None, client_secret=None)
-    session = _create_cached_oauth_session(auth_tuple, auth_host, auth_token_endpoint)
-
+def _set_session_user_agent(session: Session, client_name: Optional[str] = None):
+    """Set the User-Agent header for the session, including the client name if provided."""
     session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", client_name)
 
-    session.mount("http://", HTTPAdapter(max_retries=DEFAULT_RETRY))
-    session.mount("https://", HTTPAdapter(max_retries=DEFAULT_RETRY))
 
-    # Monkey patch to serialize JSON and validate paths
+def _monkey_patch_send(session: Session, json_serializer: Callable[[Any], Any]):
+    """
+    Monkey patch to serialize JSON and validate paths
+    :param session:
+    :param json_serializer:
+    :return:
+    """
     vanilla_prep = session.prepare_request
 
     def prepare_request(req, *args, **kwargs):
@@ -137,7 +86,121 @@ def create_session(
         return resp
 
     session.send = send_request
+
+
+def create_session(
+    *,
+    auth: Optional[Union[str, os.PathLike, tuple]] = None,
+    auth_host: str = DEFAULT_HOST,
+    auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+    client_name: Optional[str] = None,
+    json_serializer: Callable[[Any], Any] = serialize_body,
+    initial_token: Optional[dict] = None,
+    on_token_updated: Optional[Callable[[dict], None]] = None,
+    token_provider: Optional[RequestsAuthSession] = None,
+) -> Session:
+    """Create a requests session with enhancements.
+
+    - OAuth2 authentication with automatic token refresh
+    - Automatic JSON serialization for jsonable objects
+    - Default retry logic for transient errors
+    - Sunset header handling
+    - Always call raise_for_status with enhanced error messages
+
+    Args:
+        auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
+        auth_host: Authentication server base URL
+        auth_token_endpoint: Relative path to token endpoint
+        client_name: Name added to User-Agent header
+        json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
+        initial_token: Pre-fetched token dict to inject, skipping the initial network fetch if valid.
+        on_token_updated: Callback invoked with the new token dict whenever a fresh token is fetched.
+        token_provider: Explicit token provider to use. When given, auth/initial_token/on_token_updated
+            are ignored. Multiple sessions sharing one provider share the same token lifecycle.
+
+    Returns:
+        Configured requests Session
+    """
+    if token_provider is None:
+        token_provider = RequestsAuthSession(
+            auth=auth,
+            host=auth_host,
+            token_endpoint=auth_token_endpoint,
+            initial_token=initial_token,
+            on_token_updated=on_token_updated,
+        )
+
+    session = requests.Session()
+    session.auth = KognicBearerAuth(token_provider)
+    _set_session_user_agent(session, client_name)
+    _monkey_patch_send(session, json_serializer)
+    session.mount("http://", HTTPAdapter(max_retries=DEFAULT_RETRY))
+    session.mount("https://", HTTPAdapter(max_retries=DEFAULT_RETRY))
     return session
+
+
+def make_token_provider(
+    *,
+    auth: ANY_AUTH_TYPE = None,
+    auth_host: str = DEFAULT_HOST,
+    auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+    token_cache: Optional[TokenCache] = None,
+) -> RequestsAuthSession:
+    """Create a RequestsAuthSession wired to an optional token cache.
+
+    Args:
+        auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
+        auth_host: Authentication server base URL
+        auth_token_endpoint: Relative path to token endpoint
+        token_cache: Token cache for cross-process persistence. When given, a valid cached token is
+            injected on startup and new tokens are saved automatically.
+
+    Returns:
+        Configured RequestsAuthSession
+    """
+    client_id, client_secret = resolve_credentials(auth)
+    return RequestsAuthSession(
+        auth=(client_id, client_secret),
+        host=auth_host,
+        token_endpoint=auth_token_endpoint,
+        initial_token=token_cache.load(auth_host, client_id) if (token_cache and client_id) else None,
+        on_token_updated=(lambda t: token_cache.save(auth_host, client_id, t)) if (token_cache and client_id) else None,
+    )
+
+
+_provider_pool: WeakValueDictionary[tuple, RequestsAuthSession] = WeakValueDictionary()
+_provider_pool_lock = threading.Lock()
+
+
+def _get_shared_provider(
+    auth: ANY_AUTH_TYPE,
+    auth_host: str,
+    auth_token_endpoint: str,
+    token_cache: Optional[TokenCache] = None,
+) -> RequestsAuthSession:
+    """Return a shared RequestsAuthSession for the given credentials, creating one if needed.
+
+    Providers are keyed by (client_id, auth_host, auth_token_endpoint, cache_type) and held
+    weakly, so they are GC'd once no BaseApiClient instances reference them.
+    """
+    client_id, client_secret = resolve_credentials(auth)
+
+    if not client_id or not client_secret:
+        return RequestsAuthSession(auth=auth, host=auth_host, token_endpoint=auth_token_endpoint)
+
+    key = (client_id, auth_host, auth_token_endpoint, type(token_cache))
+    with _provider_pool_lock:
+        provider = _provider_pool.get(key)
+        if provider is None:
+            provider = RequestsAuthSession(
+                auth=(client_id, client_secret),
+                host=auth_host,
+                token_endpoint=auth_token_endpoint,
+                initial_token=token_cache.load(auth_host, client_id) if token_cache else None,
+                on_token_updated=(lambda t: token_cache.save(auth_host, client_id, t)) if token_cache else None,
+            )
+            _provider_pool[key] = provider
+    return provider
 
 
 class BaseApiClient:
@@ -149,6 +212,9 @@ class BaseApiClient:
     - Retry logic for transient errors (502, 503, 504)
     - Sunset header handling
     - Enhanced error messages
+
+    Clients with the same credentials and auth host automatically share a token provider,
+    so only one token fetch occurs across all instances with those credentials.
 
     The interface is consistent with requests - use session.get(), session.post(), etc.
     Calls return the response object. Use response.json() to get the data.
@@ -167,6 +233,8 @@ class BaseApiClient:
         auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
         json_serializer: Callable[[Any], Any] = serialize_body,
+        token_provider: Optional[RequestsAuthSession] = None,
+        token_cache: Optional[TokenCache] = None,
     ):
         """Initialize the API client.
 
@@ -176,12 +244,18 @@ class BaseApiClient:
             auth_token_endpoint: Relative path to token endpoint
             client_name: Name added to User-Agent. Use "auto" for class name, None for no name.
             json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
+            token_provider: Explicit token provider to share across clients. When omitted, a shared
+                provider is looked up (or created) by credentials + auth_host.
+            token_cache: Token cache for cross-process token persistence. When given, a valid cached
+                token is injected on startup and new tokens are saved automatically.
         """
         self._session: Optional[Session] = None
         self._auth = auth
         self._auth_host = auth_host
         self._auth_token_endpoint = auth_token_endpoint
         self._json_serializer = json_serializer
+        self._token_provider = token_provider
+        self._token_cache = token_cache
         self._lock = Lock()
 
         if client_name == "auto":
@@ -197,10 +271,11 @@ class BaseApiClient:
         if self._session is None:
             with self._lock:
                 if self._session is None:
+                    provider = self._token_provider or _get_shared_provider(
+                        self._auth, self._auth_host, self._auth_token_endpoint, self._token_cache
+                    )
                     self._session = create_session(
-                        auth=self._auth,
-                        auth_host=self._auth_host,
-                        auth_token_endpoint=self._auth_token_endpoint,
+                        token_provider=provider,
                         client_name=self._client_name,
                         json_serializer=self._json_serializer,
                     )

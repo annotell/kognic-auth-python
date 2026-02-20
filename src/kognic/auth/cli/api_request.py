@@ -7,8 +7,10 @@ import json
 import sys
 from typing import Any
 
+from kognic.auth.cli import _configure_logging
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config, resolve_environment
-from kognic.auth.requests.base_client import create_session
+from kognic.auth.internal.token_cache import make_cache
+from kognic.auth.requests.base_client import create_session, make_token_provider
 
 METHODS = ["get", "post", "put", "patch", "delete", "head", "options"]
 
@@ -42,6 +44,14 @@ def _create_parser() -> argparse.ArgumentParser:
         default="json",
         help="Output format: json (default), jsonl (one JSON object per line), csv, tsv, table (markdown)",
     )
+    parser.add_argument(
+        "--token-cache",
+        choices=["auto", "keyring", "file", "none"],
+        default="auto",
+        help="Token cache backend: auto (default), keyring, file, or none. "
+        "Auto will use keyring if available, otherwise file.",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Enable debug logging")
     return parser
 
 
@@ -162,10 +172,10 @@ def run(parsed: argparse.Namespace) -> int:
         config = load_kognic_env_config(parsed.env_config_file_path)
         env = resolve_environment(config, parsed.url, parsed.env_name)
 
-        session = create_session(
-            auth=env.credentials,
-            auth_host=env.auth_server,
+        provider = make_token_provider(
+            auth=env.credentials, auth_host=env.auth_server, token_cache=make_cache(parsed.token_cache)
         )
+        session = create_session(token_provider=provider)
 
         response = session.request(
             method=parsed.method.upper(),
@@ -186,9 +196,7 @@ def run(parsed: argparse.Namespace) -> int:
 
 
 def main(args: list[str] | None = None) -> None:
-    from kognic.auth.cli import _configure_logging
-
-    _configure_logging()
     parser = _create_parser()
     parsed = parser.parse_args(args)
+    _configure_logging(verbose=parsed.verbose)
     sys.exit(run(parsed))

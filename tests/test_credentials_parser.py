@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 from kognic.auth.credentials_parser import (
     ApiCredentials,
-    get_credentials,
     get_credentials_from_env,
     parse_credentials,
     resolve_credentials,
@@ -56,41 +55,6 @@ class TestParseCredentials(unittest.TestCase):
         with self.assertRaises(KeyError) as ctx:
             parse_credentials(incomplete)
         self.assertIn("email", str(ctx.exception))
-
-
-class TestGetCredentials(unittest.TestCase):
-    def test_json_file_path(self):
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump(VALID_CREDENTIALS_DICT, f)
-            path = f.name
-
-        try:
-            creds = get_credentials(path)
-            self.assertEqual(creds.client_id, "test_id")
-        finally:
-            Path(path).unlink()
-
-    def test_non_json_file_raises(self):
-        with self.assertRaises(ValueError) as ctx:
-            get_credentials("/some/path/creds.yaml")
-        self.assertIn("must be json", str(ctx.exception))
-
-    def test_api_credentials_passthrough(self):
-        creds = ApiCredentials(
-            client_id="id",
-            client_secret="secret",
-            email="a@b.com",
-            user_id=1,
-            issuer="issuer",
-        )
-        result = get_credentials(creds)
-        self.assertIs(result, creds)
-
-    def test_unsupported_type_raises(self):
-        with self.assertRaises(ValueError):
-            get_credentials(12345)
 
 
 class TestGetCredentialsFromEnv(unittest.TestCase):
@@ -183,6 +147,32 @@ class TestResolveCredentials(unittest.TestCase):
         client_id, client_secret = resolve_credentials()
         self.assertIsNone(client_id)
         self.assertIsNone(client_secret)
+
+    def test_auth_non_json_path_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            resolve_credentials(auth="/some/path/creds.yaml")
+        self.assertIn("must be json", str(ctx.exception))
+
+    def test_auth_api_credentials(self):
+        creds = ApiCredentials(
+            client_id="id",
+            client_secret="secret",
+            email="a@b.com",
+            user_id=1,
+            issuer="issuer",
+        )
+        client_id, client_secret = resolve_credentials(auth=creds)
+        self.assertEqual(client_id, "id")
+        self.assertEqual(client_secret, "secret")
+
+    def test_auth_unsupported_type_raises(self):
+        with self.assertRaises(ValueError):
+            resolve_credentials(auth=12345)
+
+    def test_auth_dict(self):
+        client_id, client_secret = resolve_credentials(auth=VALID_CREDENTIALS_DICT)
+        self.assertEqual(client_id, "test_id")
+        self.assertEqual(client_secret, "test_secret")
 
 
 if __name__ == "__main__":
