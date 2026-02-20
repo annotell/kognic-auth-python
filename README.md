@@ -71,7 +71,7 @@ Each environment has the following fields:
 
 `default_environment` specifies which environment to use as a fallback when no `--env` flag is given and no URL match is found.
 
-### get-access-token
+### kognic-auth get-access-token
 
 Generate an access token for Kognic API authentication.
 
@@ -102,9 +102,11 @@ kognic-auth get-access-token --env example
 kognic-auth get-access-token --env example --server https://custom.server
 ```
 
-### credentials
+### kognic-auth credentials
 
-Manage credentials stored in the system keyring. This is the recommended way to store credentials on a developer machine — more secure than a credentials file and no environment variables needed.
+Manage credentials stored in the system keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager, etc.). 
+This is the recommended way to store credentials on a developer machine — more secure than a credentials file and no environment variables in shell profiles.
+Credentials files downloaded from the Kognic Platform UI can be put into the keyring. 
 
 ```bash
 kognic-auth credentials put FILE [--env ENV]
@@ -123,40 +125,18 @@ kognic-auth credentials delete [--env ENV]
 
 **`delete`** — removes credentials from the keyring for the given profile.
 
-**Examples:**
-```bash
-# Store credentials under the default profile (used as fallback when no credentials are configured)
-kognic-auth credentials put ~/Downloads/credentials.json
-
-# Store per-environment credentials
-kognic-auth credentials put ~/Downloads/prod-creds.json --env production
-kognic-auth credentials put ~/Downloads/example-creds.json --env example
-
-# Read stored credentials
-kognic-auth credentials get
-kognic-auth credentials get --env production
-
-# Remove credentials
-kognic-auth credentials delete --env example
-```
-
-### Storing credentials in the keyring
-
-The system keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager, etc.) is the recommended place to keep credentials on a developer machine. No credentials files on disk, no environment variables in shell profiles.
-
 **Single-environment setup** — store once, works everywhere:
 ```bash
 kognic-auth credentials put ~/Downloads/credentials.json
 # All CLI commands and the SDK will now find credentials automatically
 ```
 
-**Multi-environment setup** — store per-environment credentials and reference them in `environments.json`:
+**Multi-environment setup** — store per-environment credentials and reference them in `environments.json` using `keyring://` URIs:
 ```bash
 kognic-auth credentials put ~/Downloads/prod-creds.json --env production
 kognic-auth credentials put ~/Downloads/example-creds.json --env example
 ```
 
-Then in `~/.config/kognic/environments.json`, reference the keyring profiles with `keyring://`:
 ```json
 {
   "default_environment": "production",
@@ -175,11 +155,20 @@ Then in `~/.config/kognic/environments.json`, reference the keyring profiles wit
 }
 ```
 
-Now `kog get https://app.kognic.com/v1/projects` automatically picks up the `production` keyring credentials, and `kog get https://example.kognic.com/v1/projects` picks up `example`.
+Now `kog get https://app.kognic.com/v1/projects` automatically picks up the `production` keyring credentials, and `kog get https://example.kognic.com/v1/projects` picks up `example`. The `keyring://` URI also works in the `auth` parameter of API clients:
 
-The `keyring://` URI also works in the `auth` parameter of API clients:
 ```python
 client = BaseApiClient(auth="keyring://production")
+```
+
+**Other examples:**
+```bash
+# Read stored credentials
+kognic-auth credentials get
+kognic-auth credentials get --env production
+
+# Remove credentials
+kognic-auth credentials delete --env example
 ```
 
 **Credential resolution order** — when no explicit `auth` is provided, the SDK tries sources in this order:
@@ -189,7 +178,7 @@ client = BaseApiClient(auth="keyring://production")
 
 ### kog
 
-Make an authenticated HTTP request to a Kognic API.
+Make an authenticated HTTP request to a Kognic API. Think of `kog` as a lightweight `curl` that automatically handles authentication and environment resolution.
 
 ```bash
 kog <METHOD> URL [-d DATA] [-H HEADER] [--format FORMAT] [--env NAME] [--env-config-file-path FILE]
