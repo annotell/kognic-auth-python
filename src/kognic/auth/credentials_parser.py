@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
+from kognic.auth.internal import credential_store
+
 ANY_AUTH_TYPE = Union[str, os.PathLike, tuple, "ApiCredentials", dict, None]
 
 REQUIRED_CREDENTIALS_FILE_KEYS = [
@@ -61,9 +63,7 @@ def get_credentials_from_env() -> tuple[Optional[str], Optional[str]]:
     if client_id and client_secret:
         return client_id, client_secret
 
-    from kognic.auth.internal.credential_store import load_credentials
-
-    kr_creds = load_credentials()
+    kr_creds = credential_store.load_credentials()
     if kr_creds:
         return kr_creds.client_id, kr_creds.client_secret
 
@@ -94,9 +94,7 @@ def resolve_credentials(
         path = str(auth)
         if path.startswith("keyring://"):
             profile = path[len("keyring://") :]
-            from kognic.auth.internal.credential_store import load_credentials
-
-            kr_creds = load_credentials(profile)
+            kr_creds = credential_store.load_credentials(profile)
             if kr_creds:
                 client_id, client_secret = kr_creds.client_id, kr_creds.client_secret
             else:
@@ -111,6 +109,7 @@ def resolve_credentials(
             client_id = creds.client_id
             client_secret = creds.client_secret
     elif auth is not None:
+        # unreasonable type, but we want to be defensive in case of user error
         raise ValueError(f"Unsupported auth type: {type(auth)}")
 
     if not client_id and not client_secret:
