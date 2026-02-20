@@ -19,7 +19,7 @@ from requests.adapters import HTTPAdapter, Retry
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import handle_sunset
 from kognic.auth._user_agent import get_user_agent
-from kognic.auth.credentials_parser import resolve_credentials
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE, resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.internal.token_cache import TokenCache
 from kognic.auth.requests.auth_session import RequestsAuthSession
@@ -141,7 +141,7 @@ def create_session(
 
 def make_token_provider(
     *,
-    auth: Optional[Union[str, os.PathLike, tuple]] = None,
+    auth: ANY_AUTH_TYPE = None,
     auth_host: str = DEFAULT_HOST,
     auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     token_cache: Optional[TokenCache] = None,
@@ -173,7 +173,7 @@ _provider_pool_lock = threading.Lock()
 
 
 def _get_shared_provider(
-    auth: Optional[Union[str, os.PathLike, tuple]],
+    auth: ANY_AUTH_TYPE,
     auth_host: str,
     auth_token_endpoint: str,
     token_cache: Optional[TokenCache] = None,
@@ -183,10 +183,7 @@ def _get_shared_provider(
     Providers are keyed by (client_id, auth_host, auth_token_endpoint, cache_type) and held
     weakly, so they are GC'd once no BaseApiClient instances reference them.
     """
-    try:
-        client_id, client_secret = resolve_credentials(auth)
-    except Exception:
-        client_id, client_secret = None, None
+    client_id, client_secret = resolve_credentials(auth)
 
     if not client_id or not client_secret:
         return RequestsAuthSession(auth=auth, host=auth_host, token_endpoint=auth_token_endpoint)

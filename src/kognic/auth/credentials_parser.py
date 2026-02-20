@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
+ANY_AUTH_TYPE = Union[str, os.PathLike, tuple, "ApiCredentials", dict, None]
+
 REQUIRED_CREDENTIALS_FILE_KEYS = [
     "clientId",
     "clientSecret",
@@ -22,7 +24,7 @@ class ApiCredentials:
     issuer: str
 
 
-def parse_credentials(path: Union[str, os.PathLike, dict]):
+def parse_credentials(path: Union[str, os.PathLike, dict]) -> ApiCredentials:
     if isinstance(path, dict):
         credentials = path
     else:
@@ -47,19 +49,7 @@ def parse_credentials(path: Union[str, os.PathLike, dict]):
     )
 
 
-def get_credentials(auth):
-    if isinstance(auth, (str, os.PathLike)):
-        path = str(auth)
-        if not path.endswith(".json"):
-            raise ValueError(f"Bad auth credentials file, must be json: {path}")
-        return parse_credentials(auth)
-    elif isinstance(auth, ApiCredentials):
-        return auth
-    else:
-        raise ValueError("Bad auth credentials, must be path to credentials file, or ApiCredentials object")
-
-
-def get_credentials_from_env():
+def get_credentials_from_env() -> tuple[Optional[str], Optional[str]]:
     creds = os.getenv("KOGNIC_CREDENTIALS")
     if creds:
         client_credentials = parse_credentials(creds)
@@ -71,20 +61,37 @@ def get_credentials_from_env():
     return client_id, client_secret
 
 
-def resolve_credentials(auth=None, client_id: Optional[str] = None, client_secret: Optional[str] = None):
+def resolve_credentials(
+    auth: ANY_AUTH_TYPE = None, client_id: Optional[str] = None, client_secret: Optional[str] = None
+) -> tuple[Optional[str], Optional[str]]:
     has_credentials_tuple = client_id is not None and client_secret is not None
-    if auth is not None:
-        if has_credentials_tuple:
+
+    if has_credentials_tuple:
+        if auth is not None:
             raise ValueError("Choose either auth or client_id+client_secret")
-        if isinstance(auth, tuple):
-            if len(auth) != 2:
-                raise ValueError("Credentials tuple must be tuple of (client_id, client_secret)")
-            client_id, client_secret = auth
-        else:
-            creds = get_credentials(auth)
-            client_id = creds.client_id
-            client_secret = creds.client_secret
-    elif not has_credentials_tuple:
+
+    elif isinstance(auth, tuple):
+        if len(auth) != 2:
+            raise ValueError("Credentials tuple must be tuple of (client_id, client_secret)")
+        client_id, client_secret = auth
+    elif isinstance(auth, ApiCredentials):
+        client_id = auth.client_id
+        client_secret = auth.client_secret
+    elif isinstance(auth, dict):
+        creds = parse_credentials(auth)
+        client_id = creds.client_id
+        client_secret = creds.client_secret
+    elif isinstance(auth, (str, os.PathLike)):
+        path = str(auth)
+        if not path.endswith(".json"):
+            raise ValueError(f"Bad auth credentials file, must be json: {path}")
+        creds = parse_credentials(auth)
+        client_id = creds.client_id
+        client_secret = creds.client_secret
+    elif auth is not None:
+        raise ValueError(f"Unsupported auth type: {type(auth)}")
+
+    if not client_id and not client_secret:
         client_id, client_secret = get_credentials_from_env()
 
     return client_id, client_secret
