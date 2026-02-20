@@ -1119,7 +1119,7 @@ class KogCacheTest(unittest.TestCase):
 
 
 class CredentialsCommandTest(unittest.TestCase):
-    def test_load_stores_credentials(self):
+    def test_put_stores_credentials(self):
         import json
         import tempfile
 
@@ -1136,7 +1136,7 @@ class CredentialsCommandTest(unittest.TestCase):
 
         try:
             with mock.patch("kognic.auth.cli.credentials.save_credentials") as mock_save:
-                result = main(["credentials", "load", path])
+                result = main(["credentials", "put", path])
             self.assertEqual(result, 0)
             args, kwargs = mock_save.call_args
             self.assertEqual(args[0].client_id, "test-client-id")
@@ -1145,7 +1145,7 @@ class CredentialsCommandTest(unittest.TestCase):
         finally:
             Path(path).unlink()
 
-    def test_load_custom_profile(self):
+    def test_put_custom_profile(self):
         import json
         import tempfile
 
@@ -1162,7 +1162,7 @@ class CredentialsCommandTest(unittest.TestCase):
 
         try:
             with mock.patch("kognic.auth.cli.credentials.save_credentials") as mock_save:
-                result = main(["credentials", "load", path, "--env", "demo"])
+                result = main(["credentials", "put", path, "--env", "demo"])
             self.assertEqual(result, 0)
             args, kwargs = mock_save.call_args
             self.assertEqual(args[0].client_id, "id")
@@ -1171,8 +1171,49 @@ class CredentialsCommandTest(unittest.TestCase):
         finally:
             Path(path).unlink()
 
-    def test_load_missing_file_returns_error(self):
-        result = main(["credentials", "load", "/nonexistent/creds.json"])
+    def test_put_missing_file_returns_error(self):
+        result = main(["credentials", "put", "/nonexistent/creds.json"])
+        self.assertEqual(result, 1)
+
+    def test_get_returns_credentials(self):
+        from kognic.auth.credentials_parser import ApiCredentials
+
+        fake_creds = ApiCredentials(
+            client_id="my-id",
+            client_secret="my-secret",
+            email="user@kognic.com",
+            user_id=42,
+            issuer="auth.kognic.com",
+        )
+        with mock.patch("kognic.auth.cli.credentials.load_credentials", return_value=fake_creds):
+            with mock.patch("builtins.print") as mock_print:
+                result = main(["credentials", "get"])
+        self.assertEqual(result, 0)
+        output = json.loads(mock_print.call_args[0][0])
+        self.assertEqual(output["clientId"], "my-id")
+        self.assertEqual(output["clientSecret"], "my-secret")
+        self.assertEqual(output["email"], "user@kognic.com")
+        self.assertEqual(output["userId"], 42)
+        self.assertEqual(output["issuer"], "auth.kognic.com")
+
+    def test_get_custom_profile(self):
+        from kognic.auth.credentials_parser import ApiCredentials
+
+        fake_creds = ApiCredentials(
+            client_id="demo-id",
+            client_secret="demo-secret",
+            email="demo@kognic.com",
+            user_id=1,
+            issuer="auth.kognic.com",
+        )
+        with mock.patch("kognic.auth.cli.credentials.load_credentials", return_value=fake_creds) as mock_load:
+            result = main(["credentials", "get", "--env", "demo"])
+        self.assertEqual(result, 0)
+        mock_load.assert_called_once_with("demo")
+
+    def test_get_not_found_returns_error(self):
+        with mock.patch("kognic.auth.cli.credentials.load_credentials", return_value=None):
+            result = main(["credentials", "get"])
         self.assertEqual(result, 1)
 
     def test_clear_removes_credentials(self):
