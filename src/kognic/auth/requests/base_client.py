@@ -17,7 +17,7 @@ from requests import Session
 from requests.adapters import HTTPAdapter, Retry
 
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
-from kognic.auth._sunset import handle_sunset
+from kognic.auth._sunset import SunsetHandler, default_sunset_handler, handle_sunset
 from kognic.auth._user_agent import get_user_agent
 from kognic.auth.credentials_parser import ANY_AUTH_TYPE, resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
@@ -31,10 +31,12 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_RETRY = Retry(total=3, connect=3, read=3, backoff_factor=0.5, status_forcelist=[502, 503, 504])
 
+_DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
 
-def _check_response(resp: requests.Response):
+
+def _check_response(resp: requests.Response, sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER):
     """Handle sunset headers and raise for status with enhanced error messages."""
-    handle_sunset(resp)
+    handle_sunset(resp, sunset_handler)
     try:
         resp.raise_for_status()
     except requests.HTTPError as e:
@@ -56,7 +58,11 @@ def _set_session_user_agent(session: Session, client_name: Optional[str] = None)
     session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", client_name)
 
 
-def _monkey_patch_send(session: Session, json_serializer: Callable[[Any], Any]):
+def _monkey_patch_send(
+    session: Session,
+    json_serializer: Callable[[Any], Any],
+    sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
+):
     """
     Monkey patch to serialize JSON and validate paths
     :param session:
@@ -82,7 +88,7 @@ def _monkey_patch_send(session: Session, json_serializer: Callable[[Any], Any]):
 
     def send_request(req, *args, **kwargs):
         resp = vanilla_send(req, *args, **kwargs)
-        _check_response(resp)
+        _check_response(resp, sunset_handler)
         return resp
 
     session.send = send_request
@@ -98,6 +104,7 @@ def create_session(
     initial_token: Optional[dict] = None,
     on_token_updated: Optional[Callable[[dict], None]] = None,
     token_provider: Optional[RequestsAuthSession] = None,
+    sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
 ) -> Session:
     """Create a requests session with enhancements.
 
@@ -117,6 +124,8 @@ def create_session(
         on_token_updated: Callback invoked with the new token dict whenever a fresh token is fetched.
         token_provider: Explicit token provider to use. When given, auth/initial_token/on_token_updated
             are ignored. Multiple sessions sharing one provider share the same token lifecycle.
+        sunset_handler: Callable invoked with ``(sunset_date, method, url)`` when a sunset header is
+            detected. Defaults to logging a warning or error. Pass ``None`` to disable.
 
     Returns:
         Configured requests Session
@@ -133,7 +142,7 @@ def create_session(
     session = requests.Session()
     session.auth = KognicBearerAuth(token_provider)
     _set_session_user_agent(session, client_name)
-    _monkey_patch_send(session, json_serializer)
+    _monkey_patch_send(session, json_serializer, sunset_handler)
     session.mount("http://", HTTPAdapter(max_retries=DEFAULT_RETRY))
     session.mount("https://", HTTPAdapter(max_retries=DEFAULT_RETRY))
     return session
@@ -235,6 +244,7 @@ class BaseApiClient:
         json_serializer: Callable[[Any], Any] = serialize_body,
         token_provider: Optional[RequestsAuthSession] = None,
         token_cache: Optional[TokenCache] = None,
+        sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
     ):
         """Initialize the API client.
 
@@ -248,6 +258,8 @@ class BaseApiClient:
                 provider is looked up (or created) by credentials + auth_host.
             token_cache: Token cache for cross-process token persistence. When given, a valid cached
                 token is injected on startup and new tokens are saved automatically.
+            sunset_handler: Callable invoked with ``(sunset_date, method, url)`` when a sunset header
+                is detected. Defaults to logging a warning or error. Pass ``None`` to disable.
         """
         self._session: Optional[Session] = None
         self._auth = auth
@@ -256,6 +268,7 @@ class BaseApiClient:
         self._json_serializer = json_serializer
         self._token_provider = token_provider
         self._token_cache = token_cache
+        self._sunset_handler = sunset_handler
         self._lock = Lock()
 
         if client_name == "auto":
@@ -278,6 +291,7 @@ class BaseApiClient:
                         token_provider=provider,
                         client_name=self._client_name,
                         json_serializer=self._json_serializer,
+                        sunset_handler=self._sunset_handler,
                     )
         return self._session
 
