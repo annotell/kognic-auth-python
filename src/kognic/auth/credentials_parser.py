@@ -58,6 +58,15 @@ def get_credentials_from_env() -> tuple[Optional[str], Optional[str]]:
     client_id = os.getenv("KOGNIC_CLIENT_ID")
     client_secret = os.getenv("KOGNIC_CLIENT_SECRET")
 
+    if client_id and client_secret:
+        return client_id, client_secret
+
+    from kognic.auth.internal.credential_store import load_credentials
+
+    kr_creds = load_credentials()
+    if kr_creds:
+        return kr_creds.client_id, kr_creds.client_secret
+
     return client_id, client_secret
 
 
@@ -83,11 +92,24 @@ def resolve_credentials(
         client_secret = creds.client_secret
     elif isinstance(auth, (str, os.PathLike)):
         path = str(auth)
-        if not path.endswith(".json"):
+        if path.startswith("keyring://"):
+            profile = path[len("keyring://") :]
+            from kognic.auth.internal.credential_store import load_credentials
+
+            kr_creds = load_credentials(profile)
+            if kr_creds:
+                client_id, client_secret = kr_creds.client_id, kr_creds.client_secret
+            else:
+                raise ValueError(
+                    f"No credentials found in keyring for profile '{profile}'. "
+                    f"Run 'kognic-auth credentials load <file> --env {profile}' to store them."
+                )
+        elif not path.endswith(".json"):
             raise ValueError(f"Bad auth credentials file, must be json: {path}")
-        creds = parse_credentials(auth)
-        client_id = creds.client_id
-        client_secret = creds.client_secret
+        else:
+            creds = parse_credentials(auth)
+            client_id = creds.client_id
+            client_secret = creds.client_secret
     elif auth is not None:
         raise ValueError(f"Unsupported auth type: {type(auth)}")
 

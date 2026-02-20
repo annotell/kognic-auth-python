@@ -33,7 +33,7 @@ def load_kognic_env_config(path: Union[str, os.PathLike] = DEFAULT_ENV_CONFIG_FI
     environments = {}
     for name, env_data in data.get("environments", {}).items():
         credentials = env_data.get("credentials")
-        if credentials:
+        if credentials and not credentials.startswith("keyring://"):
             credentials = str(Path(credentials).expanduser())
         environments[name] = Environment(
             name=name,

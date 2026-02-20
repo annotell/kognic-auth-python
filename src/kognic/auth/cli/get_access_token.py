@@ -11,7 +11,7 @@ from kognic.auth.requests.base_client import make_token_provider
 COMMAND = "get-access-token"
 
 
-def register_parser(subparsers: argparse._SubParsersAction) -> None:
+def register_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
     token_parser = subparsers.add_parser(
         COMMAND,
         help="Generate an access token for Kognic API authentication",
@@ -43,6 +43,8 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Token cache backend: auto (default), keyring, file, or none. "
         "Auto will use keyring if available, otherwise file-based caching.",
     )
+
+    return token_parser
 
 
 def run(parsed: argparse.Namespace) -> int:

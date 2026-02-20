@@ -56,6 +56,25 @@ class LoadConfigTest(unittest.TestCase):
                 load_kognic_env_config(f.name)
         Path(f.name).unlink()
 
+    def test_keyring_uri_not_expanded(self):
+        """keyring:// credentials are stored as-is, not treated as file paths."""
+        data = {
+            "environments": {
+                "production": {
+                    "host": "app.kognic.com",
+                    "auth_server": "https://auth.app.kognic.com",
+                    "credentials": "keyring://production",
+                }
+            }
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(data, f)
+            f.flush()
+            config = load_kognic_env_config(f.name)
+        Path(f.name).unlink()
+
+        self.assertEqual(config.environments["production"].credentials, "keyring://production")
+
     def test_empty_contexts(self):
         data = {"environments": {}}
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:

@@ -5,9 +5,9 @@ import logging
 import sys
 from types import ModuleType
 
-from kognic.auth.cli import get_access_token
+from kognic.auth.cli import credentials, get_access_token
 
-_SUBCOMMANDS: list[ModuleType] = [get_access_token]
+_SUBCOMMANDS: list[ModuleType] = [get_access_token, credentials]
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -32,7 +32,16 @@ def _configure_logging(verbose: bool = False) -> None:
 
 
 def main(args: list[str] | None = None) -> int:
-    parser = create_parser()
+    parser = argparse.ArgumentParser(
+        prog="kognic-auth",
+        description="Kognic authentication CLI",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Enable debug logging")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    for subcommand in _SUBCOMMANDS:
+        subcommand.register_parser(subparsers)
+
     parsed = parser.parse_args(args)
     _configure_logging(verbose=parsed.verbose)
 
