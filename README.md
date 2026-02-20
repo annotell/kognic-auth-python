@@ -107,25 +107,34 @@ kognic-auth get-access-token --env demo --server https://custom.server
 Manage credentials stored in the system keyring. This is the recommended way to store credentials on a developer machine — more secure than a credentials file and no environment variables needed.
 
 ```bash
-kognic-auth credentials load FILE [--env ENV]
+kognic-auth credentials put FILE [--env ENV]
+kognic-auth credentials get [--env ENV]
 kognic-auth credentials clear [--env ENV]
 ```
 
-**`load`** — reads a Kognic credentials JSON file and stores the `client_id` and `client_secret` in the system keyring.
+**`put`** — reads a Kognic credentials JSON file and stores it in the system keyring.
 
 - `FILE` - Path to a Kognic credentials JSON file (the same format accepted by `--credentials`)
 - `--env` - Profile name to store under (default: `default`). Use the environment name from `environments.json` to link the credentials to that environment.
+
+**`get`** — prints credentials stored in the keyring as JSON.
+
+- `--env` - Profile name to read (default: `default`).
 
 **`clear`** — removes credentials from the keyring for the given profile.
 
 **Examples:**
 ```bash
 # Store credentials under the default profile (used as fallback when no credentials are configured)
-kognic-auth credentials load ~/Downloads/credentials.json
+kognic-auth credentials put ~/Downloads/credentials.json
 
 # Store per-environment credentials
-kognic-auth credentials load ~/Downloads/prod-creds.json --env production
-kognic-auth credentials load ~/Downloads/demo-creds.json --env demo
+kognic-auth credentials put ~/Downloads/prod-creds.json --env production
+kognic-auth credentials put ~/Downloads/demo-creds.json --env demo
+
+# Read stored credentials
+kognic-auth credentials get
+kognic-auth credentials get --env production
 
 # Remove credentials
 kognic-auth credentials clear --env demo
@@ -137,14 +146,14 @@ The system keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager, e
 
 **Single-environment setup** — store once, works everywhere:
 ```bash
-kognic-auth credentials load ~/Downloads/credentials.json
+kognic-auth credentials put ~/Downloads/credentials.json
 # All CLI commands and the SDK will now find credentials automatically
 ```
 
 **Multi-environment setup** — store per-environment credentials and reference them in `environments.json`:
 ```bash
-kognic-auth credentials load ~/Downloads/prod-creds.json --env production
-kognic-auth credentials load ~/Downloads/demo-creds.json --env demo
+kognic-auth credentials put ~/Downloads/prod-creds.json --env production
+kognic-auth credentials put ~/Downloads/demo-creds.json --env demo
 ```
 
 Then in `~/.config/kognic/environments.json`, reference the keyring profiles with `keyring://`:
