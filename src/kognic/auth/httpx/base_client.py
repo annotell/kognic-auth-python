@@ -13,13 +13,15 @@ if TYPE_CHECKING:
 import httpx
 
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
-from kognic.auth._sunset import handle_sunset
+from kognic.auth._sunset import SunsetHandler, default_sunset_handler, handle_sunset
 from kognic.auth._user_agent import get_user_agent
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.httpx.async_client import HttpxAuthAsyncClient
 from kognic.auth.serde import serialize_body
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
 
 
 def _handle_http_error(resp: httpx.Response):
@@ -66,6 +68,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",
         json_serializer: Callable[[Any], Any] = serialize_body,
+        sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
         **kwargs,
     ):
         """Initialize the async API client.
@@ -76,6 +79,8 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             auth_token_endpoint: Relative path to token endpoint
             client_name: Name added to User-Agent. Use "auto" for class name, None for no name.
             json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
+            sunset_handler: Callable invoked with ``(sunset_date, method, url)`` when a sunset header
+                is detected. Defaults to logging a warning or error. Pass ``None`` to disable.
             **kwargs: Additional arguments passed to the underlying httpx client (e.g. timeout, verify).
         """
         if client_name == "auto":
@@ -120,7 +125,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
 
             resp = await call_with_simple_retry(3)
 
-            handle_sunset(resp)
+            handle_sunset(resp, sunset_handler)
             _handle_http_error(resp)
             return resp
 
