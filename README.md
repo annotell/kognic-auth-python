@@ -107,14 +107,14 @@ kognic-auth get-access-token --env demo --server https://custom.server
 Manage credentials stored in the system keyring. This is the recommended way to store credentials on a developer machine — more secure than a credentials file and no environment variables needed.
 
 ```bash
-kognic-auth credentials load FILE [--profile PROFILE]
-kognic-auth credentials clear [--profile PROFILE]
+kognic-auth credentials load FILE [--env ENV]
+kognic-auth credentials clear [--env ENV]
 ```
 
 **`load`** — reads a Kognic credentials JSON file and stores the `client_id` and `client_secret` in the system keyring.
 
 - `FILE` - Path to a Kognic credentials JSON file (the same format accepted by `--credentials`)
-- `--profile` / `--env` - Profile name to store under (default: `default`). Use the environment name from `environments.json` to link the credentials to that environment.
+- `--env` - Profile name to store under (default: `default`). Use the environment name from `environments.json` to link the credentials to that environment.
 
 **`clear`** — removes credentials from the keyring for the given profile.
 

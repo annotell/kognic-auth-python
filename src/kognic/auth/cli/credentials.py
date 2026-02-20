@@ -4,7 +4,7 @@ import argparse
 import sys
 
 from kognic.auth.credentials_parser import parse_credentials
-from kognic.auth.internal.credential_store import DEFAULT_PROFILE, clear_credentials, save_credentials
+from kognic.auth.internal.credentials_store import DEFAULT_PROFILE, clear_credentials, save_credentials
 
 COMMAND = "credentials"
 

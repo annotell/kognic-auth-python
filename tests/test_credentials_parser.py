@@ -59,7 +59,7 @@ class TestParseCredentials(unittest.TestCase):
 
 class TestGetCredentialsFromEnv(unittest.TestCase):
     @patch.dict(os.environ, {}, clear=True)
-    @patch("kognic.auth.internal.credentials_store.load_credentials", return_value=None)
+    @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
     def test_no_env_vars_returns_none(self, _):
         client_id, client_secret = get_credentials_from_env()
         self.assertIsNone(client_id)
@@ -67,7 +67,7 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
 
     @patch.dict(os.environ, {}, clear=True)
     @patch(
-        "kognic.auth.internal.credentials_store.load_credentials",
+        "kognic.auth.credentials_parser.credentials_store.load_credentials",
         return_value=ApiCredentials(
             client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i"
         ),
@@ -78,7 +78,7 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
         self.assertEqual(client_secret, "kr_secret")
 
     @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id", "KOGNIC_CLIENT_SECRET": "env_secret"}, clear=True)
-    @patch("kognic.auth.internal.credentials_store.load_credentials")
+    @patch("kognic.auth.credentials_parser.credentials_store.load_credentials")
     def test_env_vars_take_precedence_over_keyring(self, mock_load):
         client_id, client_secret = get_credentials_from_env()
         self.assertEqual(client_id, "env_id")
@@ -196,7 +196,7 @@ class TestResolveCredentials(unittest.TestCase):
         self.assertEqual(client_secret, "test_secret")
 
     @patch(
-        "kognic.auth.internal.credentials_store.load_credentials",
+        "kognic.auth.credentials_parser.credentials_store.load_credentials",
         return_value=ApiCredentials(
             client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i"
         ),
@@ -207,7 +207,7 @@ class TestResolveCredentials(unittest.TestCase):
         self.assertEqual(client_secret, "kr_secret")
         mock_load.assert_called_once_with("myprofile")
 
-    @patch("kognic.auth.internal.credentials_store.load_credentials", return_value=None)
+    @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
     def test_auth_keyring_uri_not_found_raises(self, _):
         with self.assertRaises(ValueError) as ctx:
             resolve_credentials(auth="keyring://missing-profile")

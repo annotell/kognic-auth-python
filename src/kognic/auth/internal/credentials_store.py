@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from kognic.auth.credentials_parser import ApiCredentials
 
-from kognic.auth.credentials_parser import parse_credentials
-
 SERVICE_NAME = "kognic-credentials"
 DEFAULT_PROFILE = "default"
 
@@ -39,6 +37,8 @@ def load_credentials(profile: str = DEFAULT_PROFILE) -> Optional[ApiCredentials]
         stored = kr.get_password(SERVICE_NAME, profile)
         if stored is None:
             return None
+
+        from kognic.auth.credentials_parser import parse_credentials
 
         return parse_credentials(json.loads(stored))
     except Exception:
