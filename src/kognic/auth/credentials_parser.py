@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
-from kognic.auth.internal import credential_store
+from kognic.auth.internal import credentials_store
 
 ANY_AUTH_TYPE = Union[str, os.PathLike, tuple, "ApiCredentials", dict, None]
 
@@ -63,9 +63,9 @@ def get_credentials_from_env() -> tuple[Optional[str], Optional[str]]:
     if client_id and client_secret:
         return client_id, client_secret
 
-    kr_creds = credential_store.load_credentials()
-    if kr_creds:
-        return kr_creds.client_id, kr_creds.client_secret
+    keyring_creds = credentials_store.load_credentials()
+    if keyring_creds:
+        return keyring_creds.client_id, keyring_creds.client_secret
 
     return client_id, client_secret
 
@@ -94,9 +94,9 @@ def resolve_credentials(
         path = str(auth)
         if path.startswith("keyring://"):
             profile = path[len("keyring://") :]
-            kr_creds = credential_store.load_credentials(profile)
-            if kr_creds:
-                client_id, client_secret = kr_creds.client_id, kr_creds.client_secret
+            keyring_creds = credentials_store.load_credentials(profile)
+            if keyring_creds:
+                client_id, client_secret = keyring_creds.client_id, keyring_creds.client_secret
             else:
                 raise ValueError(
                     f"No credentials found in keyring for profile '{profile}'. "
