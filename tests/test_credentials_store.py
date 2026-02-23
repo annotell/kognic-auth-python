@@ -19,6 +19,7 @@ FULL_CREDS_DICT = {
     "email": "test@kognic.com",
     "userId": 1,
     "issuer": "auth.kognic.test",
+    "name": "API Credentials",
 }
 
 FULL_CREDS = ApiCredentials(

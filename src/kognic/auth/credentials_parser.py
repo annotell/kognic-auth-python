@@ -138,14 +138,16 @@ def resolve_credentials(
         if auth is not None:
             raise ValueError("Choose either auth or client_id+client_secret")
 
-    else:
+    elif auth is not None:
         creds = resolve_any_credentials(auth)
         return creds.client_id, creds.client_secret
+    elif client_id and client_secret:
+        return client_id, client_secret
 
-    if not client_id and not client_secret:
-        client_id, client_secret = get_credentials_from_env()
-
-    return client_id, client_secret
+    creds = get_credentials_from_system()
+    if creds:
+        return creds.client_id, creds.client_secret
+    return None, None
 
 
 if __name__ == "__main__":
