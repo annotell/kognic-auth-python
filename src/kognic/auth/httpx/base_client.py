@@ -7,6 +7,8 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE
+
 if TYPE_CHECKING:
     from typing import Self
 
@@ -63,7 +65,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
     def __init__(
         self,
         *,
-        auth: Optional[Union[str, os.PathLike, tuple]] = None,
+        auth: ANY_AUTH_TYPE = None,
         auth_host: str = DEFAULT_HOST,
         auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         client_name: Optional[str] = "auto",

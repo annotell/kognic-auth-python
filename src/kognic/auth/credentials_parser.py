@@ -21,8 +21,9 @@ def parse_credentials(path: Union[str, os.PathLike, dict]) -> ApiCredentials:
     if isinstance(path, dict):
         credentials = path
     else:
+        absolute_path = Path(path).expanduser().resolve()
         try:
-            credentials = json.loads(Path(path).read_text())
+            credentials = json.loads(absolute_path.read_text())
         except FileNotFoundError:
             raise FileNotFoundError(f"Could not find API Credentials file at {path}") from None
 
@@ -83,7 +84,7 @@ def get_credentials_from_system() -> Optional[ApiCredentials]:
     return None
 
 
-def resolve_any_credentials(auth: ANY_AUTH_TYPE) -> Optional[ApiCredentials]:
+def resolve_any_credentials(auth: ANY_AUTH_TYPE) -> ApiCredentials:
     """
     Resolve credentials from a variety of input types
     :param auth:
@@ -139,8 +140,7 @@ def resolve_credentials(
 
     else:
         creds = resolve_any_credentials(auth)
-        if creds:
-            return creds.client_id, creds.client_secret
+        return creds.client_id, creds.client_secret
 
     if not client_id and not client_secret:
         client_id, client_secret = get_credentials_from_env()

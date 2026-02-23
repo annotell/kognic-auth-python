@@ -8,7 +8,7 @@ from authlib.integrations.requests_client import OAuth2Session
 
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth.base.auth_client import AuthClient
-from kognic.auth.credentials_parser import resolve_credentials
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE, resolve_credentials
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class RequestsAuthSession(AuthClient):
     def __init__(
         self,
         *,
-        auth=None,
+        auth: ANY_AUTH_TYPE = None,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
