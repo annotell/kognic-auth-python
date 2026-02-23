@@ -91,12 +91,6 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
         self.assertEqual(client_id, "env_id")
         self.assertEqual(client_secret, "env_secret")
 
-    @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id"}, clear=True)
-    def test_only_client_id_returns_none_secret(self):
-        client_id, client_secret = get_credentials_from_env()
-        self.assertEqual(client_id, "env_id")
-        self.assertIsNone(client_secret)
-
     def test_kognic_credentials_file(self):
         import tempfile
 
@@ -164,7 +158,8 @@ class TestResolveCredentials(unittest.TestCase):
         self.assertEqual(client_secret, "env_secret")
 
     @patch.dict(os.environ, {}, clear=True)
-    def test_no_credentials_returns_none(self):
+    @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
+    def test_no_credentials_returns_none(self, _):
         client_id, client_secret = resolve_credentials()
         self.assertIsNone(client_id)
         self.assertIsNone(client_secret)

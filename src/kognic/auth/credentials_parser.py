@@ -137,12 +137,10 @@ def resolve_credentials(
     if has_credentials_tuple:
         if auth is not None:
             raise ValueError("Choose either auth or client_id+client_secret")
-
+        return client_id, client_secret
     elif auth is not None:
         creds = resolve_any_credentials(auth)
         return creds.client_id, creds.client_secret
-    elif client_id and client_secret:
-        return client_id, client_secret
 
     creds = get_credentials_from_system()
     if creds:
