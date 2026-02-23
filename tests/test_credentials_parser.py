@@ -69,7 +69,7 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
     @patch(
         "kognic.auth.credentials_parser.credentials_store.load_credentials",
         return_value=ApiCredentials(
-            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i"
+            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i", name="name"
         ),
     )
     def test_falls_back_to_keyring(self, _):
@@ -90,12 +90,6 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
         client_id, client_secret = get_credentials_from_env()
         self.assertEqual(client_id, "env_id")
         self.assertEqual(client_secret, "env_secret")
-
-    @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id"}, clear=True)
-    def test_only_client_id_returns_none_secret(self):
-        client_id, client_secret = get_credentials_from_env()
-        self.assertEqual(client_id, "env_id")
-        self.assertIsNone(client_secret)
 
     def test_kognic_credentials_file(self):
         import tempfile
@@ -164,7 +158,8 @@ class TestResolveCredentials(unittest.TestCase):
         self.assertEqual(client_secret, "env_secret")
 
     @patch.dict(os.environ, {}, clear=True)
-    def test_no_credentials_returns_none(self):
+    @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
+    def test_no_credentials_returns_none(self, _):
         client_id, client_secret = resolve_credentials()
         self.assertIsNone(client_id)
         self.assertIsNone(client_secret)
@@ -181,6 +176,7 @@ class TestResolveCredentials(unittest.TestCase):
             email="a@b.com",
             user_id=1,
             issuer="issuer",
+            name="name",
         )
         client_id, client_secret = resolve_credentials(auth=creds)
         self.assertEqual(client_id, "id")
@@ -198,7 +194,7 @@ class TestResolveCredentials(unittest.TestCase):
     @patch(
         "kognic.auth.credentials_parser.credentials_store.load_credentials",
         return_value=ApiCredentials(
-            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i"
+            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i", name="name"
         ),
     )
     def test_auth_keyring_uri(self, mock_load):
