@@ -69,7 +69,7 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
     @patch(
         "kognic.auth.credentials_parser.credentials_store.load_credentials",
         return_value=ApiCredentials(
-            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i"
+            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i", name="name"
         ),
     )
     def test_falls_back_to_keyring(self, _):
@@ -181,6 +181,7 @@ class TestResolveCredentials(unittest.TestCase):
             email="a@b.com",
             user_id=1,
             issuer="issuer",
+            name="name",
         )
         client_id, client_secret = resolve_credentials(auth=creds)
         self.assertEqual(client_id, "id")
@@ -198,7 +199,7 @@ class TestResolveCredentials(unittest.TestCase):
     @patch(
         "kognic.auth.credentials_parser.credentials_store.load_credentials",
         return_value=ApiCredentials(
-            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i"
+            client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i", name="name"
         ),
     )
     def test_auth_keyring_uri(self, mock_load):

@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from kognic.auth.credentials_parser import ApiCredentials
+    from kognic.auth.credentials import ApiCredentials
 
 SERVICE_NAME = "kognic-credentials"
 DEFAULT_PROFILE = "default"
@@ -60,6 +60,7 @@ def save_credentials(creds: ApiCredentials, profile: str = DEFAULT_PROFILE) -> N
         "email": creds.email,
         "userId": creds.user_id,
         "issuer": creds.issuer,
+        "name": creds.name,
     }
     kr.set_password(SERVICE_NAME, profile, json.dumps(data))
     log.debug("Saved credentials to keyring for profile=%s", profile)
