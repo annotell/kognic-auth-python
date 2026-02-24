@@ -3,11 +3,13 @@
 import json
 import os
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 from kognic.auth.credentials_parser import (
     ApiCredentials,
+    _check_expiry,
     get_credentials_from_env,
     parse_credentials,
     resolve_credentials,
@@ -55,6 +57,27 @@ class TestParseCredentials(unittest.TestCase):
         with self.assertRaises(KeyError) as ctx:
             parse_credentials(incomplete)
         self.assertIn("email", str(ctx.exception))
+
+    def test_parse_stores_created_and_expires(self):
+        data = {
+            **VALID_CREDENTIALS_DICT,
+            "created": "2026-01-01T00:00:00.000000Z",
+            "expires": "2099-01-01T00:00:00.000000Z",
+        }
+        creds = parse_credentials(data)
+        self.assertEqual(creds.created, datetime(2026, 1, 1, tzinfo=timezone.utc))
+        self.assertEqual(creds.expires, datetime(2099, 1, 1, tzinfo=timezone.utc))
+
+    def test_parse_does_not_check_expiry(self):
+        """parse_credentials should not raise even if expires is in the past."""
+        data = {**VALID_CREDENTIALS_DICT, "expires": "2000-01-01T00:00:00.000000Z"}
+        creds = parse_credentials(data)
+        self.assertEqual(creds.expires, datetime(2000, 1, 1, tzinfo=timezone.utc))
+
+    def test_parse_malformed_expires_returns_none(self):
+        data = {**VALID_CREDENTIALS_DICT, "expires": "not-a-date"}
+        creds = parse_credentials(data)
+        self.assertIsNone(creds.expires)
 
 
 class TestGetCredentialsFromEnv(unittest.TestCase):
@@ -208,6 +231,34 @@ class TestResolveCredentials(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             resolve_credentials(auth="keyring://missing-profile")
         self.assertIn("missing-profile", str(ctx.exception))
+
+
+def _make_creds(**kwargs) -> ApiCredentials:
+    return ApiCredentials(
+        client_id="id",
+        client_secret="secret",
+        email="a@b.com",
+        user_id=1,
+        issuer="issuer",
+        **kwargs,
+    )
+
+
+class TestCheckExpiry(unittest.TestCase):
+    def test_no_expires_field(self):
+        _check_expiry(_make_creds())  # should not raise
+
+    def test_future_expires(self):
+        _check_expiry(_make_creds(expires=datetime(2099, 1, 1, tzinfo=timezone.utc)))  # should not raise
+
+    def test_expired_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            _check_expiry(_make_creds(expires=datetime(2000, 1, 1, tzinfo=timezone.utc)))
+        self.assertIn("expired", str(ctx.exception))
+
+    def test_expired_with_time(self):
+        with self.assertRaises(ValueError):
+            _check_expiry(_make_creds(expires=datetime(2000, 6, 15, 12, 34, 56, 123456, tzinfo=timezone.utc)))
 
 
 if __name__ == "__main__":

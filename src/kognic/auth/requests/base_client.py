@@ -19,7 +19,7 @@ from requests.adapters import HTTPAdapter, Retry
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth._sunset import SunsetHandler, default_sunset_handler, handle_sunset
 from kognic.auth._user_agent import get_user_agent
-from kognic.auth.credentials_parser import ANY_AUTH_TYPE, resolve_credentials
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE, _resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.internal.token_cache import TokenCache
 from kognic.auth.requests.auth_session import RequestsAuthSession
@@ -167,9 +167,10 @@ def make_token_provider(
     Returns:
         Configured RequestsAuthSession
     """
-    client_id, client_secret = resolve_credentials(auth)
+    credentials = _resolve_credentials(auth)
+    client_id = credentials.client_id if credentials else None
     return RequestsAuthSession(
-        auth=(client_id, client_secret),
+        auth=credentials,
         host=auth_host,
         token_endpoint=auth_token_endpoint,
         initial_token=token_cache.load(auth_host, client_id) if (token_cache and client_id) else None,
@@ -192,7 +193,9 @@ def _get_shared_provider(
     Providers are keyed by (client_id, auth_host, auth_token_endpoint, cache_type) and held
     weakly, so they are GC'd once no BaseApiClient instances reference them.
     """
-    client_id, client_secret = resolve_credentials(auth)
+    credentials = _resolve_credentials(auth)
+    client_id = credentials.client_id if credentials else None
+    client_secret = credentials.client_secret if credentials else None
 
     if not client_id or not client_secret:
         return RequestsAuthSession(auth=auth, host=auth_host, token_endpoint=auth_token_endpoint)

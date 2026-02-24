@@ -8,7 +8,7 @@ from authlib.integrations.requests_client import OAuth2Session
 
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth.base.auth_client import AuthClient
-from kognic.auth.credentials_parser import ANY_AUTH_TYPE, resolve_credentials
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE, _check_expiry, _resolve_credentials
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +76,11 @@ class RequestsAuthSession(AuthClient):
         self.host = host
         self.token_url = f"{host}{token_endpoint}"
 
-        client_id, client_secret = resolve_credentials(auth, client_id, client_secret)
+        creds = _resolve_credentials(auth, client_id, client_secret)
+        if creds:
+            _check_expiry(creds)
+        client_id = creds.client_id if creds else None
+        client_secret = creds.client_secret if creds else None
         self._client_id = client_id
         self._on_token_updated = on_token_updated
 
