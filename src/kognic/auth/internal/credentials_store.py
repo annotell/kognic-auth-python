@@ -62,6 +62,10 @@ def save_credentials(creds: ApiCredentials, profile: str = DEFAULT_PROFILE) -> N
         "issuer": creds.issuer,
         "name": creds.name,
     }
+    if creds.created is not None:
+        data["created"] = creds.created.isoformat()
+    if creds.expires is not None:
+        data["expires"] = creds.expires.isoformat()
     kr.set_password(SERVICE_NAME, profile, json.dumps(data))
     log.debug("Saved credentials to keyring for profile=%s", profile)
 

@@ -1,5 +1,7 @@
 import json
 import os
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Union
 
@@ -15,6 +17,34 @@ REQUIRED_CREDENTIALS_FILE_KEYS = [
     "userId",
     "issuer",
 ]
+
+
+def _parse_datetime(s: str) -> datetime:
+    """Parse an ISO 8601 datetime string into a timezone-aware datetime.
+
+    Handles Z suffix and sub-microsecond precision (truncated to microseconds).
+    """
+    s = s.replace("Z", "+00:00")
+    s = re.sub(r"(\.\d{6})\d+", r"\1", s)
+    return datetime.fromisoformat(s)
+
+
+def _parse_optional_datetime(s: Optional[str]) -> Optional[datetime]:
+    """Parse an optional datetime string, returning None if absent or unparseable."""
+    if s is None:
+        return None
+    try:
+        return _parse_datetime(s)
+    except Exception:
+        return None
+
+
+def _check_expiry(creds: ApiCredentials) -> None:
+    """Raise ValueError if the credentials have an expires field that is in the past."""
+    if creds.expires is None:
+        return
+    if datetime.now(timezone.utc) >= creds.expires:
+        raise ValueError(f"Credentials expired at {creds.expires.isoformat()}")
 
 
 def parse_credentials(path: Union[str, os.PathLike, dict]) -> ApiCredentials:
@@ -41,6 +71,8 @@ def parse_credentials(path: Union[str, os.PathLike, dict]) -> ApiCredentials:
         user_id=credentials["userId"],
         issuer=credentials["issuer"],
         name=credentials.get("name", "API Credentials"),
+        created=_parse_optional_datetime(credentials.get("created")),
+        expires=_parse_optional_datetime(credentials.get("expires")),
     )
 
 
@@ -120,6 +152,25 @@ def resolve_any_credentials(auth: ANY_AUTH_TYPE) -> ApiCredentials:
     return creds
 
 
+def _resolve_credentials(
+    auth: ANY_AUTH_TYPE = None, client_id: Optional[str] = None, client_secret: Optional[str] = None
+) -> Optional[ApiCredentials]:
+    """
+    Resolve credentials from either an auth input (which can be a variety of types)
+    or from explicit client_id and client_secret parameters.
+    Falls back to environment variables if neither are provided.
+    Returns the full ApiCredentials object, or None if no credentials are found.
+    """
+    if client_id is not None and client_secret is not None:
+        if auth is not None:
+            raise ValueError("Choose either auth or client_id+client_secret")
+        return _anonymous_credentials(client_id, client_secret)
+    elif auth is not None:
+        return resolve_any_credentials(auth)
+
+    return get_credentials_from_system()
+
+
 def resolve_credentials(
     auth: ANY_AUTH_TYPE = None, client_id: Optional[str] = None, client_secret: Optional[str] = None
 ) -> tuple[Optional[str], Optional[str]]:
@@ -132,20 +183,10 @@ def resolve_credentials(
     :param client_secret:
     :return:
     """
-    has_credentials_tuple = client_id is not None and client_secret is not None
-
-    if has_credentials_tuple:
-        if auth is not None:
-            raise ValueError("Choose either auth or client_id+client_secret")
-        return client_id, client_secret
-    elif auth is not None:
-        creds = resolve_any_credentials(auth)
-        return creds.client_id, creds.client_secret
-
-    creds = get_credentials_from_system()
-    if creds:
-        return creds.client_id, creds.client_secret
-    return None, None
+    creds = _resolve_credentials(auth, client_id, client_secret)
+    if creds is None:
+        return None, None
+    return creds.client_id, creds.client_secret
 
 
 if __name__ == "__main__":

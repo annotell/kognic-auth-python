@@ -7,7 +7,7 @@ from authlib.oauth2.rfc6749 import OAuth2Token
 
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth.base.auth_client import AuthClient
-from kognic.auth.credentials_parser import resolve_credentials
+from kognic.auth.credentials_parser import _check_expiry, _resolve_credentials
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,12 @@ class HttpxAuthAsyncClient(AuthClient):
         self.host = host
         self.token_url = f"{host}{token_endpoint}"
 
-        client_id, client_secret = resolve_credentials(auth)
+        creds = _resolve_credentials(auth)
+        if creds:
+            _check_expiry(creds)
+
+        client_id = creds.client_id if creds else None
+        client_secret = creds.client_secret if creds else None
 
         self._oauth_client = _AsyncFixedClient(
             client_id=client_id,
