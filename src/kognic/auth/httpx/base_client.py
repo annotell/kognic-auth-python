@@ -169,4 +169,6 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         resolved = cfg.environments[env]
         kwargs.setdefault("auth", resolved.credentials)
         kwargs["auth_host"] = resolved.auth_server
+        if resolved.scopes and "scopes" not in kwargs:
+            kwargs["scopes"] = resolved.scopes
         return cls(**kwargs)

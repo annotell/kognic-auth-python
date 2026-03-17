@@ -47,6 +47,30 @@ class LoadConfigTest(unittest.TestCase):
 
         demo = config.environments["demo"]
         self.assertIsNone(demo.credentials)
+        self.assertEqual(demo.scopes, [])
+
+    def test_scopes_loaded_from_environment(self):
+        data = {
+            "environments": {
+                "scoped": {
+                    "host": "scoped.kognic.com",
+                    "auth_server": "https://auth.scoped.kognic.com",
+                    "scopes": ["api:read", "api:write"],
+                },
+                "unscoped": {
+                    "host": "unscoped.kognic.com",
+                    "auth_server": "https://auth.unscoped.kognic.com",
+                },
+            }
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(data, f)
+            f.flush()
+            config = load_kognic_env_config(f.name)
+        Path(f.name).unlink()
+
+        self.assertEqual(config.environments["scoped"].scopes, ["api:read", "api:write"])
+        self.assertEqual(config.environments["unscoped"].scopes, [])
 
     def test_invalid_json_raises(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:

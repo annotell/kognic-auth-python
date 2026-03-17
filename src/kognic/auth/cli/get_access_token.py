@@ -57,6 +57,7 @@ def run(parsed: argparse.Namespace) -> int:
     try:
         host = parsed.server
         credentials = parsed.credentials
+        env_scopes = []
 
         if parsed.env_name:
             config = load_kognic_env_config(parsed.env_config_file_path)
@@ -69,14 +70,19 @@ def run(parsed: argparse.Namespace) -> int:
                 host = ctx.auth_server
             if credentials is None:
                 credentials = ctx.credentials
+            env_scopes = ctx.scopes
 
         auth_host = host or DEFAULT_HOST
+
+        scopes = parsed.scopes
+        if scopes is None and env_scopes:
+            scopes = env_scopes
 
         provider = make_token_provider(
             auth=credentials,
             auth_host=auth_host,
             token_cache=make_cache(parsed.token_cache),
-            scopes=parsed.scopes,
+            scopes=scopes,
         )
         print(provider.ensure_token()["access_token"])
         return 0

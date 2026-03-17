@@ -174,12 +174,15 @@ def make_token_provider(
     """
     credentials = _resolve_credentials(auth)
     client_id = credentials.client_id if credentials else None
+    scope_str = " ".join(scopes) if scopes else None
     return RequestsAuthSession(
         auth=credentials,
         host=auth_host,
         token_endpoint=auth_token_endpoint,
-        initial_token=token_cache.load(auth_host, client_id) if (token_cache and client_id) else None,
-        on_token_updated=(lambda t: token_cache.save(auth_host, client_id, t)) if (token_cache and client_id) else None,
+        initial_token=(token_cache.load(auth_host, client_id, scope_str) if (token_cache and client_id) else None),
+        on_token_updated=(
+            (lambda t: token_cache.save(auth_host, client_id, t, scope_str)) if (token_cache and client_id) else None
+        ),
         scopes=scopes,
     )
 
@@ -211,12 +214,15 @@ def _get_shared_provider(
     with _provider_pool_lock:
         provider = _provider_pool.get(key)
         if provider is None:
+            scope_str = " ".join(scopes) if scopes else None
             provider = RequestsAuthSession(
                 auth=(client_id, client_secret),
                 host=auth_host,
                 token_endpoint=auth_token_endpoint,
-                initial_token=token_cache.load(auth_host, client_id) if token_cache else None,
-                on_token_updated=(lambda t: token_cache.save(auth_host, client_id, t)) if token_cache else None,
+                initial_token=token_cache.load(auth_host, client_id, scope_str) if token_cache else None,
+                on_token_updated=(
+                    (lambda t: token_cache.save(auth_host, client_id, t, scope_str)) if token_cache else None
+                ),
                 scopes=scopes,
             )
             _provider_pool[key] = provider
@@ -335,4 +341,6 @@ class BaseApiClient:
         resolved = cfg.environments[env]
         kwargs.setdefault("auth", resolved.credentials)
         kwargs["auth_host"] = resolved.auth_server
+        if resolved.scopes and "scopes" not in kwargs:
+            kwargs["scopes"] = resolved.scopes
         return cls(**kwargs)

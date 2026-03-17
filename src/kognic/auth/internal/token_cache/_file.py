@@ -30,9 +30,9 @@ class FileTokenCache(TokenCache):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(data, indent=2))
 
-    def load(self, auth_server: str, client_id: str) -> Optional[dict]:
+    def load(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> Optional[dict]:
         try:
-            key = make_key(auth_server, client_id)
+            key = make_key(auth_server, client_id, scopes)
             token = self._load_all().get(key)
             if token is None:
                 return None
@@ -45,9 +45,9 @@ class FileTokenCache(TokenCache):
             log.debug("Failed to load token from file cache", exc_info=True)
             return None
 
-    def save(self, auth_server: str, client_id: str, token: dict) -> None:
+    def save(self, auth_server: str, client_id: str, token: dict, scopes: Optional[str] = None) -> None:
         try:
-            key = make_key(auth_server, client_id)
+            key = make_key(auth_server, client_id, scopes)
             data = self._load_all()
             data[key] = token
             self._save_all(data)
@@ -55,9 +55,9 @@ class FileTokenCache(TokenCache):
         except Exception:
             log.debug("Failed to save token to file cache", exc_info=True)
 
-    def clear(self, auth_server: str, client_id: str) -> None:
+    def clear(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> None:
         try:
-            key = make_key(auth_server, client_id)
+            key = make_key(auth_server, client_id, scopes)
             data = self._load_all()
             if key in data:
                 del data[key]

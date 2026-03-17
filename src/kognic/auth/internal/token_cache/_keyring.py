@@ -35,12 +35,12 @@ class KeyringTokenCache(TokenCache):
             return None
         return self._keyring_module
 
-    def load(self, auth_server: str, client_id: str) -> Optional[dict]:
+    def load(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> Optional[dict]:
         kr = self._keyring()
         if kr is None:
             return None
         try:
-            key = make_key(auth_server, client_id)
+            key = make_key(auth_server, client_id, scopes)
             stored = kr.get_password(SERVICE_NAME, key)
             if stored is None:
                 return None
@@ -54,23 +54,23 @@ class KeyringTokenCache(TokenCache):
             log.debug("Failed to load token from keyring", exc_info=True)
             return None
 
-    def save(self, auth_server: str, client_id: str, token: dict) -> None:
+    def save(self, auth_server: str, client_id: str, token: dict, scopes: Optional[str] = None) -> None:
         kr = self._keyring()
         if kr is None:
             return
         try:
-            key = make_key(auth_server, client_id)
+            key = make_key(auth_server, client_id, scopes)
             kr.set_password(SERVICE_NAME, key, json.dumps(token))
             log.debug("Saved token to keyring for key=%s", key)
         except Exception:
             log.debug("Failed to save token to keyring", exc_info=True)
 
-    def clear(self, auth_server: str, client_id: str) -> None:
+    def clear(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> None:
         kr = self._keyring()
         if kr is None:
             return
         try:
-            key = make_key(auth_server, client_id)
+            key = make_key(auth_server, client_id, scopes)
             kr.delete_password(SERVICE_NAME, key)
             log.debug("Cleared cached token from keyring for key=%s", key)
         except Exception:
