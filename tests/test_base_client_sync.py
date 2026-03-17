@@ -296,7 +296,7 @@ class TestProviderPool(unittest.TestCase):
         client = BaseApiClient(auth=("id1", "secret1"))
         _ = client.session
 
-        pool_key = ("id1", DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH, type(None))
+        pool_key = ("id1", DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH, type(None), None)
         self.assertIn(pool_key, _provider_pool)
         _ = client  # keep alive
 
@@ -322,7 +322,7 @@ class TestProviderPool(unittest.TestCase):
             ):
                 client = BaseApiClient(auth=("id-gc", "secret-gc"))
                 session = client.session
-                pool_key = ("id-gc", DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH, type(None))
+                pool_key = ("id-gc", DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH, type(None), None)
                 provider_ref = weakref.ref(_provider_pool[pool_key])
                 self.assertIsNotNone(provider_ref())
 

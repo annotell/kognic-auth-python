@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 
 @dataclass
@@ -13,3 +13,4 @@ class ApiCredentials:
     name: str = "API Credentials"
     created: Optional[datetime] = None
     expires: Optional[datetime] = None
+    scopes: List[str] = field(default_factory=list)

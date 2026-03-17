@@ -43,6 +43,12 @@ def register_parser(subparsers: argparse._SubParsersAction) -> argparse.Argument
         help="Token cache backend: auto (default), keyring, file, or none. "
         "Auto will use keyring if available, otherwise file-based caching.",
     )
+    token_parser.add_argument(
+        "--scopes",
+        nargs="+",
+        default=None,
+        help="OAuth2 scopes to request, e.g. --scopes api:read api:write",
+    )
 
     return token_parser
 
@@ -70,6 +76,7 @@ def run(parsed: argparse.Namespace) -> int:
             auth=credentials,
             auth_host=auth_host,
             token_cache=make_cache(parsed.token_cache),
+            scopes=parsed.scopes,
         )
         print(provider.ensure_token()["access_token"])
         return 0

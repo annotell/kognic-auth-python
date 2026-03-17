@@ -1,5 +1,6 @@
 import logging
 from asyncio import Lock
+from typing import List, Optional
 
 import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
@@ -30,6 +31,7 @@ class HttpxAuthAsyncClient(AuthClient):
         auth=None,
         host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
+        scopes: Optional[List[str]] = None,
         **kwargs,
     ):
         """Initialize the async auth client.
@@ -38,6 +40,7 @@ class HttpxAuthAsyncClient(AuthClient):
             auth: Authentication credentials - path to credentials file or (client_id, client_secret) tuple
             host: Base url for authentication server
             token_endpoint: Relative path to the token endpoint
+            scopes: OAuth2 scopes to request, e.g. ["api:read", "api:write"].
             **kwargs: Additional params to pass into Httpx Client Constructor
         """
         self.host = host
@@ -50,12 +53,16 @@ class HttpxAuthAsyncClient(AuthClient):
         client_id = creds.client_id if creds else None
         client_secret = creds.client_secret if creds else None
 
+        if scopes is None and creds and creds.scopes:
+            scopes = creds.scopes
+
         self._oauth_client = _AsyncFixedClient(
             client_id=client_id,
             client_secret=client_secret,
             update_token=self._update_token,
             token_endpoint=self.token_url,
             grant_type="client_credentials",
+            scope=" ".join(scopes) if scopes else None,
             **kwargs,
         )
         self._oauth_client.register_compliance_hook("access_token_response", AuthClient.check_rate_limit)

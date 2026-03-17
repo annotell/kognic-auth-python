@@ -93,6 +93,7 @@ class CliMainTest(unittest.TestCase):
             auth="/path/to/creds.json",
             auth_host=DEFAULT_HOST,
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
@@ -108,6 +109,7 @@ class CliMainTest(unittest.TestCase):
             auth=None,
             auth_host="https://custom.server",
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
@@ -132,6 +134,7 @@ class CliMainTest(unittest.TestCase):
             auth="creds.json",
             auth_host="https://my.server",
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
@@ -190,6 +193,7 @@ class CliMainTest(unittest.TestCase):
             auth="/path/to/demo-creds.json",
             auth_host="https://auth.demo.kognic.com",
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
@@ -219,6 +223,7 @@ class CliMainTest(unittest.TestCase):
             auth="/path/to/demo-creds.json",
             auth_host="https://custom.server",
             token_cache=None,
+            scopes=None,
         )
 
     def test_main_with_unknown_context(self):
@@ -265,6 +270,7 @@ class CliCacheTest(unittest.TestCase):
             auth=mock.ANY,
             auth_host=mock.ANY,
             token_cache=mock_cache,
+            scopes=None,
         )
         mock_print.assert_called_once_with("cached-token-abc")
 
@@ -287,6 +293,7 @@ class CliCacheTest(unittest.TestCase):
             auth=mock.ANY,
             auth_host=mock.ANY,
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")

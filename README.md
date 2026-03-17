@@ -17,6 +17,23 @@ The credentials will contain the Client Id and Client Secret.
 4. Set to credentials tuple `auth=(client_id, client_secret)`
 5. Store credentials in the system keyring (see [Storing credentials in the keyring](#storing-credentials-in-the-keyring))
 
+The credentials file also supports an optional `scopes` field — an array of OAuth2 scopes
+to request when fetching tokens:
+
+```json
+{
+  "clientId": "...",
+  "clientSecret": "...",
+  "email": "...",
+  "userId": 123,
+  "issuer": "...",
+  "scopes": ["api:read", "api:write"]
+}
+```
+
+Scopes from the credentials file are used as defaults. They can be overridden by passing
+`scopes` explicitly to any client constructor or CLI command.
+
 API clients such as the `InputApiClient` accept this `auth` parameter.
 
 Under the hood, they commonly use the AuthSession class which is implements a `requests` session with automatic token
@@ -76,7 +93,7 @@ Each environment has the following fields:
 Generate an access token for Kognic API authentication.
 
 ```bash
-kognic-auth get-access-token [--server SERVER] [--credentials FILE] [--env NAME] [--env-config-file-path FILE]
+kognic-auth get-access-token [--server SERVER] [--credentials FILE] [--env NAME] [--env-config-file-path FILE] [--scopes SCOPE ...]
 ```
 
 **Options:**
@@ -84,6 +101,7 @@ kognic-auth get-access-token [--server SERVER] [--credentials FILE] [--env NAME]
 - `--credentials` - Path to JSON credentials file. If not provided, credentials are read from environment variables.
 - `--env` - Use a named environment from the config file.
 - `--env-config-file-path` - Environment config file path (default: `~/.config/kognic/environments.json`)
+- `--scopes` - OAuth2 scopes to request (e.g. `--scopes api:read api:write`). Overrides scopes from credentials file.
 
 When `--env` is provided, the auth server and credentials are resolved from the config file. Explicit `--server` or `--credentials` flags override the environment values.
 
@@ -100,13 +118,16 @@ kognic-auth get-access-token --env example
 
 # Using an environment but overriding the server
 kognic-auth get-access-token --env example --server https://custom.server
+
+# Request specific scopes
+kognic-auth get-access-token --scopes api:read api:write
 ```
 
 ### kognic-auth credentials
 
-Manage credentials stored in the system keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager, etc.). 
+Manage credentials stored in the system keyring (macOS Keychain, GNOME Keyring, Windows Credential Manager, etc.).
 This is the recommended way to store credentials on a developer machine — more secure than a credentials file and no environment variables in shell profiles.
-Credentials files downloaded from the Kognic Platform UI can be put into the keyring. 
+Credentials files downloaded from the Kognic Platform UI can be put into the keyring.
 
 ```bash
 kognic-auth credentials put FILE [--env ENV]
@@ -271,6 +292,9 @@ client = MyApiClient(auth=("my-client-id", "my-client-secret"))
 
 # Or with credentials file
 client = MyApiClient(auth="~/.config/kognic/credentials.json")
+
+# With explicit scopes
+client = MyApiClient(auth=("my-client-id", "my-client-secret"), scopes=["api:read", "api:write"])
 ```
 
 ### Async Client (httpx)
@@ -286,6 +310,10 @@ class MyAsyncApiClient(BaseAsyncApiClient):
 
 # Usage as async context manager
 async with MyAsyncApiClient() as client:
+    resource = await client.get_resource("123")
+
+# With explicit scopes
+async with MyAsyncApiClient(scopes=["api:read"]) as client:
     resource = await client.get_resource("123")
 ```
 
