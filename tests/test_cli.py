@@ -311,8 +311,10 @@ class CliMainTest(unittest.TestCase):
         self.assertEqual(result, 0)
         printed = mock_print.call_args[0][0]
         decoded = json.loads(printed)
-        self.assertEqual(decoded["sub"], "user123")
-        self.assertEqual(decoded["exp"], 9999999999)
+        self.assertEqual(decoded["header"], {"alg": "RS256"})
+        self.assertEqual(decoded["payload"]["sub"], "user123")
+        self.assertEqual(decoded["payload"]["exp"], 9999999999)
+        self.assertEqual(decoded["signature"], "fakesignature")
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
     def test_main_decode_invalid_jwt(self, mock_make_provider):

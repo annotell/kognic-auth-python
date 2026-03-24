@@ -55,20 +55,26 @@ def register_parser(subparsers: argparse._SubParsersAction) -> argparse.Argument
         "--decode",
         action="store_true",
         default=False,
-        help="Decode and pretty-print the JWT payload instead of printing the raw token",
+        help="Decode and pretty-print the JWT header, payload, and signature instead of printing the raw token",
     )
 
     return token_parser
+
+
+def _decode_jwt_part(part: str) -> dict:
+    padded = part + "=" * (-len(part) % 4)
+    return json.loads(base64.urlsafe_b64decode(padded))
 
 
 def _decode_jwt(token: str) -> str:
     parts = token.split(".")
     if len(parts) != 3:
         raise ValueError("Token is not a valid JWT (expected 3 dot-separated parts)")
-    payload = parts[1]
-    # Add padding if needed
-    payload += "=" * (-len(payload) % 4)
-    decoded = json.loads(base64.urlsafe_b64decode(payload))
+    decoded = {
+        "header": _decode_jwt_part(parts[0]),
+        "payload": _decode_jwt_part(parts[1]),
+        "signature": parts[2],
+    }
     return json.dumps(decoded, indent=2)
 
 
