@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import requests
 from authlib.common.errors import AuthlibBaseError
@@ -59,6 +59,7 @@ class RequestsAuthSession(AuthClient):
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         initial_token: Optional[dict] = None,
         on_token_updated: Optional[Callable[[dict], None]] = None,
+        scopes: Optional[List[str]] = None,
         **kwargs,
     ):
         """Initialize the auth session.
@@ -71,6 +72,7 @@ class RequestsAuthSession(AuthClient):
             token_endpoint: Relative path to the token endpoint
             initial_token: Pre-fetched token dict to inject, skipping the initial network fetch if valid.
             on_token_updated: Callback invoked with the new token dict whenever a fresh token is fetched.
+            scopes: OAuth2 scopes to request, e.g. ["api:read", "api:write"].
             **kwargs: Additional params to pass into Client Constructor
         """
         self.host = host
@@ -84,6 +86,9 @@ class RequestsAuthSession(AuthClient):
         self._client_id = client_id
         self._on_token_updated = on_token_updated
 
+        if scopes is None and creds and creds.scopes:
+            scopes = creds.scopes
+
         self.oauth_session = _FixedSession(
             client_id=client_id,
             client_secret=client_secret,
@@ -92,6 +97,7 @@ class RequestsAuthSession(AuthClient):
             update_token=self._update_token,
             token_endpoint=self.token_url,
             token=initial_token,
+            scope=" ".join(scopes) if scopes else None,
             **kwargs,
         )
         self.oauth_session.register_compliance_hook("access_token_response", AuthClient.check_rate_limit)

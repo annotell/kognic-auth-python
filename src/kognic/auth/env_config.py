@@ -2,7 +2,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
 from urllib.parse import urlparse
 
 from kognic.auth import DEFAULT_ENV_CONFIG_FILE_PATH, DEFAULT_HOST, DEFAULT_KOGNIC_PLATFORM
@@ -14,6 +14,7 @@ class Environment:
     host: str
     auth_server: str
     credentials: Optional[str] = None
+    scopes: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -40,6 +41,7 @@ def load_kognic_env_config(path: Union[str, os.PathLike] = DEFAULT_ENV_CONFIG_FI
             host=env_data["host"],
             auth_server=env_data["auth_server"],
             credentials=credentials,
+            scopes=env_data.get("scopes", []),
         )
 
     return KognicEnvConfig(

@@ -73,6 +73,7 @@ def parse_credentials(path: Union[str, os.PathLike, dict]) -> ApiCredentials:
         name=credentials.get("name", "API Credentials"),
         created=_parse_optional_datetime(credentials.get("created")),
         expires=_parse_optional_datetime(credentials.get("expires")),
+        scopes=credentials.get("scopes", []),
     )
 
 

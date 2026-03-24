@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
 
 from kognic.auth.credentials_parser import ANY_AUTH_TYPE
 
@@ -71,6 +71,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         client_name: Optional[str] = "auto",
         json_serializer: Callable[[Any], Any] = serialize_body,
         sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
+        scopes: Optional[List[str]] = None,
         **kwargs,
     ):
         """Initialize the async API client.
@@ -83,6 +84,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             json_serializer: Callable to serialize request bodies. Defaults to serialize_body.
             sunset_handler: Callable invoked with ``(sunset_date, method, url)`` when a sunset header
                 is detected. Defaults to logging a warning or error. Pass ``None`` to disable.
+            scopes: OAuth2 scopes to request, e.g. ["api:read", "api:write"].
             **kwargs: Additional arguments passed to the underlying httpx client (e.g. timeout, verify).
         """
         if client_name == "auto":
@@ -98,6 +100,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             auth=auth,
             host=auth_host,
             token_endpoint=auth_token_endpoint,
+            scopes=scopes,
             headers=headers,
             **kwargs,
         )
@@ -166,4 +169,6 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         resolved = cfg.environments[env]
         kwargs.setdefault("auth", resolved.credentials)
         kwargs["auth_host"] = resolved.auth_server
+        if resolved.scopes and "scopes" not in kwargs:
+            kwargs["scopes"] = resolved.scopes
         return cls(**kwargs)

@@ -93,6 +93,7 @@ class CliMainTest(unittest.TestCase):
             auth="/path/to/creds.json",
             auth_host=DEFAULT_HOST,
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
@@ -108,6 +109,7 @@ class CliMainTest(unittest.TestCase):
             auth=None,
             auth_host="https://custom.server",
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
@@ -132,6 +134,7 @@ class CliMainTest(unittest.TestCase):
             auth="creds.json",
             auth_host="https://my.server",
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
@@ -190,6 +193,7 @@ class CliMainTest(unittest.TestCase):
             auth="/path/to/demo-creds.json",
             auth_host="https://auth.demo.kognic.com",
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
@@ -219,6 +223,66 @@ class CliMainTest(unittest.TestCase):
             auth="/path/to/demo-creds.json",
             auth_host="https://custom.server",
             token_cache=None,
+            scopes=None,
+        )
+
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    @mock.patch("kognic.auth.cli.get_access_token.load_kognic_env_config")
+    def test_main_with_env_scopes(self, mock_load_config, mock_make_provider):
+        from kognic.auth.env_config import KognicEnvConfig
+
+        mock_load_config.return_value = KognicEnvConfig(
+            environments={
+                "demo": Environment(
+                    name="demo",
+                    host="demo.kognic.com",
+                    auth_server="https://auth.demo.kognic.com",
+                    credentials="/path/to/demo-creds.json",
+                    scopes=["api:read", "api:write"],
+                ),
+            },
+        )
+        mock_make_provider.return_value = self._make_provider("scoped-token")
+
+        with mock.patch("builtins.print") as mock_print:
+            result = main(["get-access-token", "--env", "demo", "--token-cache", "none"])
+
+        self.assertEqual(result, 0)
+        mock_print.assert_called_once_with("scoped-token")
+        mock_make_provider.assert_called_once_with(
+            auth="/path/to/demo-creds.json",
+            auth_host="https://auth.demo.kognic.com",
+            token_cache=None,
+            scopes=["api:read", "api:write"],
+        )
+
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    @mock.patch("kognic.auth.cli.get_access_token.load_kognic_env_config")
+    def test_main_cli_scopes_override_env_scopes(self, mock_load_config, mock_make_provider):
+        from kognic.auth.env_config import KognicEnvConfig
+
+        mock_load_config.return_value = KognicEnvConfig(
+            environments={
+                "demo": Environment(
+                    name="demo",
+                    host="demo.kognic.com",
+                    auth_server="https://auth.demo.kognic.com",
+                    credentials="/path/to/demo-creds.json",
+                    scopes=["api:read", "api:write"],
+                ),
+            },
+        )
+        mock_make_provider.return_value = self._make_provider("scoped-token")
+
+        with mock.patch("builtins.print"):
+            result = main(["get-access-token", "--env", "demo", "--token-cache", "none", "--scopes", "custom:scope"])
+
+        self.assertEqual(result, 0)
+        mock_make_provider.assert_called_once_with(
+            auth="/path/to/demo-creds.json",
+            auth_host="https://auth.demo.kognic.com",
+            token_cache=None,
+            scopes=["custom:scope"],
         )
 
     def test_main_with_unknown_context(self):
@@ -265,6 +329,7 @@ class CliCacheTest(unittest.TestCase):
             auth=mock.ANY,
             auth_host=mock.ANY,
             token_cache=mock_cache,
+            scopes=None,
         )
         mock_print.assert_called_once_with("cached-token-abc")
 
@@ -287,6 +352,7 @@ class CliCacheTest(unittest.TestCase):
             auth=mock.ANY,
             auth_host=mock.ANY,
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")

@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
 from weakref import WeakValueDictionary
 
 if TYPE_CHECKING:
@@ -105,6 +105,7 @@ def create_session(
     on_token_updated: Optional[Callable[[dict], None]] = None,
     token_provider: Optional[RequestsAuthSession] = None,
     sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
+    scopes: Optional[List[str]] = None,
 ) -> Session:
     """Create a requests session with enhancements.
 
@@ -126,6 +127,7 @@ def create_session(
             are ignored. Multiple sessions sharing one provider share the same token lifecycle.
         sunset_handler: Callable invoked with ``(sunset_date, method, url)`` when a sunset header is
             detected. Defaults to logging a warning or error. Pass ``None`` to disable.
+        scopes: OAuth2 scopes to request, e.g. ["api:read", "api:write"].
 
     Returns:
         Configured requests Session
@@ -137,6 +139,7 @@ def create_session(
             token_endpoint=auth_token_endpoint,
             initial_token=initial_token,
             on_token_updated=on_token_updated,
+            scopes=scopes,
         )
 
     session = requests.Session()
@@ -154,6 +157,7 @@ def make_token_provider(
     auth_host: str = DEFAULT_HOST,
     auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     token_cache: Optional[TokenCache] = None,
+    scopes: Optional[List[str]] = None,
 ) -> RequestsAuthSession:
     """Create a RequestsAuthSession wired to an optional token cache.
 
@@ -163,18 +167,23 @@ def make_token_provider(
         auth_token_endpoint: Relative path to token endpoint
         token_cache: Token cache for cross-process persistence. When given, a valid cached token is
             injected on startup and new tokens are saved automatically.
+        scopes: OAuth2 scopes to request, e.g. ["api:read", "api:write"].
 
     Returns:
         Configured RequestsAuthSession
     """
     credentials = _resolve_credentials(auth)
     client_id = credentials.client_id if credentials else None
+    scope_str = " ".join(scopes) if scopes else None
     return RequestsAuthSession(
         auth=credentials,
         host=auth_host,
         token_endpoint=auth_token_endpoint,
-        initial_token=token_cache.load(auth_host, client_id) if (token_cache and client_id) else None,
-        on_token_updated=(lambda t: token_cache.save(auth_host, client_id, t)) if (token_cache and client_id) else None,
+        initial_token=(token_cache.load(auth_host, client_id, scope_str) if (token_cache and client_id) else None),
+        on_token_updated=(
+            (lambda t: token_cache.save(auth_host, client_id, t, scope_str)) if (token_cache and client_id) else None
+        ),
+        scopes=scopes,
     )
 
 
@@ -187,10 +196,11 @@ def _get_shared_provider(
     auth_host: str,
     auth_token_endpoint: str,
     token_cache: Optional[TokenCache] = None,
+    scopes: Optional[List[str]] = None,
 ) -> RequestsAuthSession:
     """Return a shared RequestsAuthSession for the given credentials, creating one if needed.
 
-    Providers are keyed by (client_id, auth_host, auth_token_endpoint, cache_type) and held
+    Providers are keyed by (client_id, auth_host, auth_token_endpoint, cache_type, scopes) and held
     weakly, so they are GC'd once no BaseApiClient instances reference them.
     """
     credentials = _resolve_credentials(auth)
@@ -198,18 +208,22 @@ def _get_shared_provider(
     client_secret = credentials.client_secret if credentials else None
 
     if not client_id or not client_secret:
-        return RequestsAuthSession(auth=auth, host=auth_host, token_endpoint=auth_token_endpoint)
+        return RequestsAuthSession(auth=auth, host=auth_host, token_endpoint=auth_token_endpoint, scopes=scopes)
 
-    key = (client_id, auth_host, auth_token_endpoint, type(token_cache))
+    key = (client_id, auth_host, auth_token_endpoint, type(token_cache), tuple(scopes) if scopes else None)
     with _provider_pool_lock:
         provider = _provider_pool.get(key)
         if provider is None:
+            scope_str = " ".join(scopes) if scopes else None
             provider = RequestsAuthSession(
                 auth=(client_id, client_secret),
                 host=auth_host,
                 token_endpoint=auth_token_endpoint,
-                initial_token=token_cache.load(auth_host, client_id) if token_cache else None,
-                on_token_updated=(lambda t: token_cache.save(auth_host, client_id, t)) if token_cache else None,
+                initial_token=token_cache.load(auth_host, client_id, scope_str) if token_cache else None,
+                on_token_updated=(
+                    (lambda t: token_cache.save(auth_host, client_id, t, scope_str)) if token_cache else None
+                ),
+                scopes=scopes,
             )
             _provider_pool[key] = provider
     return provider
@@ -248,6 +262,7 @@ class BaseApiClient:
         token_provider: Optional[RequestsAuthSession] = None,
         token_cache: Optional[TokenCache] = None,
         sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
+        scopes: Optional[List[str]] = None,
     ):
         """Initialize the API client.
 
@@ -263,6 +278,7 @@ class BaseApiClient:
                 token is injected on startup and new tokens are saved automatically.
             sunset_handler: Callable invoked with ``(sunset_date, method, url)`` when a sunset header
                 is detected. Defaults to logging a warning or error. Pass ``None`` to disable.
+            scopes: OAuth2 scopes to request, e.g. ["api:read", "api:write"].
         """
         self._session: Optional[Session] = None
         self._auth = auth
@@ -272,6 +288,7 @@ class BaseApiClient:
         self._token_provider = token_provider
         self._token_cache = token_cache
         self._sunset_handler = sunset_handler
+        self._scopes = scopes
         self._lock = Lock()
 
         if client_name == "auto":
@@ -288,7 +305,7 @@ class BaseApiClient:
             with self._lock:
                 if self._session is None:
                     provider = self._token_provider or _get_shared_provider(
-                        self._auth, self._auth_host, self._auth_token_endpoint, self._token_cache
+                        self._auth, self._auth_host, self._auth_token_endpoint, self._token_cache, self._scopes
                     )
                     self._session = create_session(
                         token_provider=provider,
@@ -324,4 +341,6 @@ class BaseApiClient:
         resolved = cfg.environments[env]
         kwargs.setdefault("auth", resolved.credentials)
         kwargs["auth_host"] = resolved.auth_server
+        if resolved.scopes and "scopes" not in kwargs:
+            kwargs["scopes"] = resolved.scopes
         return cls(**kwargs)
