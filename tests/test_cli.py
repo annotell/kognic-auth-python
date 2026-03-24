@@ -297,6 +297,35 @@ class CliMainTest(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn("nonexistent", mock_print.call_args[0][0])
 
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    def test_main_decode_jwt(self, mock_make_provider):
+        import base64
+
+        payload = base64.urlsafe_b64encode(json.dumps({"sub": "user123", "exp": 9999999999}).encode()).rstrip(b"=")
+        jwt_token = f"eyJhbGciOiJSUzI1NiJ9.{payload.decode()}.fakesignature"
+        mock_make_provider.return_value = self._make_provider(jwt_token)
+
+        with mock.patch("builtins.print") as mock_print:
+            result = main(["get-access-token", "--decode", "--token-cache", "none"])
+
+        self.assertEqual(result, 0)
+        printed = mock_print.call_args[0][0]
+        decoded = json.loads(printed)
+        self.assertEqual(decoded["header"], {"alg": "RS256"})
+        self.assertEqual(decoded["payload"]["sub"], "user123")
+        self.assertEqual(decoded["payload"]["exp"], 9999999999)
+        self.assertEqual(decoded["signature"], "fakesignature")
+
+    @mock.patch("kognic.auth.cli.get_access_token.make_token_provider")
+    def test_main_decode_invalid_jwt(self, mock_make_provider):
+        mock_make_provider.return_value = self._make_provider("not-a-jwt")
+
+        with mock.patch("builtins.print") as mock_print:
+            result = main(["get-access-token", "--decode", "--token-cache", "none"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("Error:", mock_print.call_args[0][0])
+
 
 class CliCacheTest(unittest.TestCase):
     """Tests for token caching in get-access-token."""
