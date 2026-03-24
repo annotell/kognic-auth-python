@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import json
 import sys
 
 from kognic.auth import DEFAULT_HOST
@@ -49,8 +51,25 @@ def register_parser(subparsers: argparse._SubParsersAction) -> argparse.Argument
         default=None,
         help="OAuth2 scopes to request, e.g. --scopes api:read api:write",
     )
+    token_parser.add_argument(
+        "--decode",
+        action="store_true",
+        default=False,
+        help="Decode and pretty-print the JWT payload instead of printing the raw token",
+    )
 
     return token_parser
+
+
+def _decode_jwt(token: str) -> str:
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError("Token is not a valid JWT (expected 3 dot-separated parts)")
+    payload = parts[1]
+    # Add padding if needed
+    payload += "=" * (-len(payload) % 4)
+    decoded = json.loads(base64.urlsafe_b64decode(payload))
+    return json.dumps(decoded, indent=2)
 
 
 def run(parsed: argparse.Namespace) -> int:
@@ -84,7 +103,11 @@ def run(parsed: argparse.Namespace) -> int:
             token_cache=make_cache(parsed.token_cache),
             scopes=scopes,
         )
-        print(provider.ensure_token()["access_token"])
+        token = provider.ensure_token()["access_token"]
+        if parsed.decode:
+            print(_decode_jwt(token))
+        else:
+            print(token)
         return 0
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
