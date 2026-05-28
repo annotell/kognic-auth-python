@@ -16,7 +16,7 @@ description = "Kognic Authentication"
 dependencies = [
     "authlib>=0.14.1,<1.7"
 ]
-requires-python=">=3.9"
+requires-python=">=3.10"
 readme = "README.md"
 keywords = ["Kognic", "API"]
 license = {text = "MIT"}
@@ -28,6 +28,8 @@ classifiers = [
 ]
 [project.urls]
 homepage = "https://github.com/annotell/kognic-auth-python"
+source = "https://github.com/annotell/kognic-auth-python"
+"release notes" = "https://github.com/annotell/kognic-auth-python/releases"
 
 [project.scripts]
 kognic-auth = "kognic.auth.cli:main"
@@ -65,7 +67,7 @@ dev = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py310"
 exclude = ["src/kognic/auth/_version.py"]
 
 [tool.ruff.lint]
