@@ -6,8 +6,44 @@ from unittest.mock import MagicMock, patch
 import requests
 from authlib.common.errors import AuthlibBaseError
 
+from kognic.auth.credentials_parser import ApiCredentials
 from kognic.auth.requests.auth_session import _FixedSession
+from kognic.auth.requests.base_client import make_token_provider
 from kognic.auth.requests.bearer_auth import KognicBearerAuth
+
+
+def _creds_with_scopes(scopes):
+    """Return ApiCredentials that declare the given scopes."""
+    return ApiCredentials(
+        client_id="test-id",
+        client_secret="test-secret",
+        email="test@kognic.com",
+        user_id=1,
+        issuer="test-issuer",
+        scopes=scopes,
+    )
+
+
+class TestMakeTokenProviderScopeResolution(unittest.TestCase):
+    """The requested scope depends on how None vs an empty list interact with credentials-file scopes."""
+
+    def test_explicit_scopes_override_credentials_scopes(self):
+        provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=["api:write"])
+        self.assertEqual(provider.oauth_session.scope, "api:write")
+
+    def test_multiple_scopes_are_space_joined(self):
+        provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=["api:read", "api:write"])
+        self.assertEqual(provider.oauth_session.scope, "api:read api:write")
+
+    def test_none_scopes_fall_back_to_credentials_scopes(self):
+        provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=None)
+        self.assertEqual(provider.oauth_session.scope, "api:read")
+
+    def test_empty_scopes_suppress_credentials_fallback(self):
+        # An empty list is not None, so the credentials-file fallback is skipped and no scope is requested.
+        # This is why kog forwards `env.scopes or None` rather than the raw (possibly empty) list.
+        provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=[])
+        self.assertIsNone(provider.oauth_session.scope)
 
 
 def _make_fixed_session():

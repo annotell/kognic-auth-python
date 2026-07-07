@@ -1118,6 +1118,78 @@ class CallApiTest(unittest.TestCase):
                 auth="/path/to/demo-creds.json",
                 auth_host="https://auth.demo.kognic.com",
                 token_cache=None,
+                scopes=None,
+            )
+
+    @mock.patch("kognic.auth.cli.api_request.resolve_environment")
+    @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
+    def test_call_api_forwards_env_scopes(self, mock_load_config, mock_resolve_environment):
+        """The resolved environment's scopes are forwarded to make_token_provider."""
+        mock_load_config.return_value = mock.MagicMock()
+        mock_resolve_environment.return_value = Environment(
+            name="staging",
+            host="staging.kognic.com",
+            auth_server="https://auth.staging.kognic.com",
+            credentials="/path/to/staging-creds.json",
+            scopes=["api:read"],
+        )
+
+        with (
+            mock.patch("kognic.auth.cli.api_request.make_token_provider") as mock_make_provider,
+            mock.patch("kognic.auth.cli.api_request.create_session") as mock_create_session,
+        ):
+            mock_session = mock.MagicMock()
+            mock_response = mock.MagicMock()
+            mock_response.ok = True
+            mock_response.headers = {"Content-Type": "text/plain"}
+            mock_response.text = "ok"
+            mock_session.request.return_value = mock_response
+            mock_create_session.return_value = mock_session
+
+            parsed = self._make_parsed(url="https://staging.kognic.com/v1/projects")
+            with mock.patch("builtins.print"):
+                call_run(parsed)
+
+            mock_make_provider.assert_called_once_with(
+                auth="/path/to/staging-creds.json",
+                auth_host="https://auth.staging.kognic.com",
+                token_cache=None,
+                scopes=["api:read"],
+            )
+
+    @mock.patch("kognic.auth.cli.api_request.resolve_environment")
+    @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
+    def test_call_api_empty_scopes_forwarded(self, mock_load_config, mock_resolve_environment):
+        """An environment without configured scopes forwards None, so the credentials-file scope fallback applies."""
+        mock_load_config.return_value = mock.MagicMock()
+        mock_resolve_environment.return_value = Environment(
+            name="default",
+            host="app.kognic.com",
+            auth_server="https://auth.app.kognic.com",
+            credentials=None,
+        )
+
+        with (
+            mock.patch("kognic.auth.cli.api_request.make_token_provider") as mock_make_provider,
+            mock.patch("kognic.auth.cli.api_request.create_session") as mock_create_session,
+        ):
+            mock_session = mock.MagicMock()
+            mock_response = mock.MagicMock()
+            mock_response.ok = True
+            mock_response.headers = {"Content-Type": "text/plain"}
+            mock_response.text = "ok"
+            mock_session.request.return_value = mock_response
+            mock_create_session.return_value = mock_session
+
+            parsed = self._make_parsed()
+            with mock.patch("builtins.print"):
+                call_run(parsed)
+
+            mock_make_provider.assert_called_once_with(
+                auth=None,
+                auth_host="https://auth.app.kognic.com",
+                token_cache=None,
+                scopes=None,
             )
 
 
@@ -1165,6 +1237,7 @@ class KogCacheTest(unittest.TestCase):
             auth=None,
             auth_host="https://auth.app.kognic.com",
             token_cache=None,
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
@@ -1210,6 +1283,7 @@ class KogCacheTest(unittest.TestCase):
             auth="/path/to/creds.json",
             auth_host="https://auth.app.kognic.com",
             token_cache=mock_cache,
+            scopes=None,
         )
 
 
