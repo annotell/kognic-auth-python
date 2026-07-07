@@ -1118,7 +1118,7 @@ class CallApiTest(unittest.TestCase):
                 auth="/path/to/demo-creds.json",
                 auth_host="https://auth.demo.kognic.com",
                 token_cache=None,
-                scopes=[],
+                scopes=None,
             )
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
@@ -1160,7 +1160,7 @@ class CallApiTest(unittest.TestCase):
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
     @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
     def test_call_api_empty_scopes_forwarded(self, mock_load_config, mock_resolve_environment):
-        """An environment without configured scopes forwards an empty list (no scopes requested)."""
+        """An environment without configured scopes forwards None, so the credentials-file scope fallback applies."""
         mock_load_config.return_value = mock.MagicMock()
         mock_resolve_environment.return_value = Environment(
             name="default",
@@ -1189,7 +1189,7 @@ class CallApiTest(unittest.TestCase):
                 auth=None,
                 auth_host="https://auth.app.kognic.com",
                 token_cache=None,
-                scopes=[],
+                scopes=None,
             )
 
 
@@ -1237,7 +1237,7 @@ class KogCacheTest(unittest.TestCase):
             auth=None,
             auth_host="https://auth.app.kognic.com",
             token_cache=None,
-            scopes=[],
+            scopes=None,
         )
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
@@ -1283,7 +1283,7 @@ class KogCacheTest(unittest.TestCase):
             auth="/path/to/creds.json",
             auth_host="https://auth.app.kognic.com",
             token_cache=mock_cache,
-            scopes=[],
+            scopes=None,
         )
 
 

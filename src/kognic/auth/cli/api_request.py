@@ -89,7 +89,7 @@ def run(parsed: argparse.Namespace) -> int:
             auth=env.credentials,
             auth_host=env.auth_server,
             token_cache=make_cache(parsed.token_cache),
-            scopes=env.scopes,
+            scopes=env.scopes or None,
         )
         session = create_session(token_provider=provider)
 
