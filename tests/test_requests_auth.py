@@ -31,6 +31,10 @@ class TestMakeTokenProviderScopeResolution(unittest.TestCase):
         provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=["api:write"])
         self.assertEqual(provider.oauth_session.scope, "api:write")
 
+    def test_multiple_scopes_are_space_joined(self):
+        provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=["api:read", "api:write"])
+        self.assertEqual(provider.oauth_session.scope, "api:read api:write")
+
     def test_none_scopes_fall_back_to_credentials_scopes(self):
         provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=None)
         self.assertEqual(provider.oauth_session.scope, "api:read")
