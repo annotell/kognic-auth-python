@@ -86,7 +86,10 @@ def run(parsed: argparse.Namespace) -> int:
         env = resolve_environment(config, parsed.url, parsed.env_name)
 
         provider = make_token_provider(
-            auth=env.credentials, auth_host=env.auth_server, token_cache=make_cache(parsed.token_cache)
+            auth=env.credentials,
+            auth_host=env.auth_server,
+            token_cache=make_cache(parsed.token_cache),
+            scopes=env.scopes,
         )
         session = create_session(token_provider=provider)
 
