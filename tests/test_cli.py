@@ -6,6 +6,7 @@ from unittest import mock
 
 from kognic.auth import DEFAULT_HOST
 from kognic.auth.cli import create_parser, main
+from kognic.auth.cli.api_request import METHODS
 from kognic.auth.cli.api_request import _create_parser as create_kog_parser
 from kognic.auth.cli.api_request import run as call_run
 from kognic.auth.env_config import Environment
@@ -479,8 +480,6 @@ class KogParserTest(unittest.TestCase):
 
     def test_kog_scope_on_every_method(self):
         parser = create_kog_parser()
-        from kognic.auth.cli.api_request import METHODS
-
         for method in METHODS:
             args = parser.parse_args(["--scope", "api:read", method, "https://app.kognic.com/v1/projects"])
             self.assertEqual(args.method, method)
