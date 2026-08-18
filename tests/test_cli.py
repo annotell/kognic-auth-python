@@ -6,6 +6,7 @@ from unittest import mock
 
 from kognic.auth import DEFAULT_HOST
 from kognic.auth.cli import create_parser, main
+from kognic.auth.cli.api_request import METHODS
 from kognic.auth.cli.api_request import _create_parser as create_kog_parser
 from kognic.auth.cli.api_request import run as call_run
 from kognic.auth.env_config import Environment
@@ -456,6 +457,39 @@ class KogParserTest(unittest.TestCase):
         args = parser.parse_args(["get", "https://app.kognic.com/v1/projects", "--token-cache", "none"])
         self.assertEqual(args.token_cache, "none")
 
+    def test_kog_scope_default_none(self):
+        parser = create_kog_parser()
+        args = parser.parse_args(["get", "https://app.kognic.com/v1/projects"])
+        self.assertIsNone(args.scopes)
+
+    def test_kog_scope_repeatable(self):
+        parser = create_kog_parser()
+        args = parser.parse_args(
+            ["post", "https://app.kognic.com/v1/projects", "--scope", "api:read", "--scope", "api:write"]
+        )
+        self.assertEqual(args.scopes, ["api:read", "api:write"])
+
+    def test_kog_scope_position_independent(self):
+        parser = create_kog_parser()
+        args = parser.parse_args(
+            ["post", "--scope", "api:read", "https://app.kognic.com/v1/projects", "--scope", "api:write"]
+        )
+        self.assertEqual(args.method, "post")
+        self.assertEqual(args.url, "https://app.kognic.com/v1/projects")
+        self.assertEqual(args.scopes, ["api:read", "api:write"])
+
+    def test_kog_scope_on_every_method(self):
+        parser = create_kog_parser()
+        for method in METHODS:
+            args = parser.parse_args(["--scope", "api:read", method, "https://app.kognic.com/v1/projects"])
+            self.assertEqual(args.method, method)
+            self.assertEqual(args.scopes, ["api:read"])
+
+    def test_kog_scope_values_unvalidated(self):
+        parser = create_kog_parser()
+        args = parser.parse_args(["get", "https://app.kognic.com/v1/projects", "--scope", "anything goes here"])
+        self.assertEqual(args.scopes, ["anything goes here"])
+
 
 class CallApiTest(unittest.TestCase):
     def _make_parsed(
@@ -467,6 +501,7 @@ class CallApiTest(unittest.TestCase):
         env_config_file_path="/nonexistent/config.json",
         env_name=None,
         token_cache="none",
+        scopes=None,
     ):
         parser = create_kog_parser()
         args = [method, url]
@@ -479,6 +514,9 @@ class CallApiTest(unittest.TestCase):
         if env_name:
             args.extend(["--env", env_name])
         args.extend(["--token-cache", token_cache])
+        if scopes:
+            for scope in scopes:
+                args.extend(["--scope", scope])
         return parser.parse_args(args)
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
@@ -1155,6 +1193,77 @@ class CallApiTest(unittest.TestCase):
                 auth_host="https://auth.staging.kognic.com",
                 token_cache=None,
                 scopes=["api:read"],
+            )
+
+    @mock.patch("kognic.auth.cli.api_request.resolve_environment")
+    @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
+    def test_call_api_cli_scopes_replace_env_scopes(self, mock_load_config, mock_resolve_environment):
+        """--scope replaces the environment's configured scopes entirely for this invocation."""
+        mock_load_config.return_value = mock.MagicMock()
+        mock_resolve_environment.return_value = Environment(
+            name="production",
+            host="app.kognic.com",
+            auth_server="https://auth.app.kognic.com",
+            credentials="/path/to/prod-creds.json",
+            scopes=["api:read"],
+        )
+
+        with (
+            mock.patch("kognic.auth.cli.api_request.make_token_provider") as mock_make_provider,
+            mock.patch("kognic.auth.cli.api_request.create_session") as mock_create_session,
+        ):
+            mock_session = mock.MagicMock()
+            mock_response = mock.MagicMock()
+            mock_response.ok = True
+            mock_response.headers = {"Content-Type": "text/plain"}
+            mock_response.text = "ok"
+            mock_session.request.return_value = mock_response
+            mock_create_session.return_value = mock_session
+
+            parsed = self._make_parsed(method="post", scopes=["api:read", "api:write"])
+            with mock.patch("builtins.print"):
+                call_run(parsed)
+
+            mock_make_provider.assert_called_once_with(
+                auth="/path/to/prod-creds.json",
+                auth_host="https://auth.app.kognic.com",
+                token_cache=None,
+                scopes=["api:read", "api:write"],
+            )
+
+    @mock.patch("kognic.auth.cli.api_request.resolve_environment")
+    @mock.patch("kognic.auth.cli.api_request.load_kognic_env_config")
+    def test_call_api_cli_scopes_without_env_scopes(self, mock_load_config, mock_resolve_environment):
+        """--scope applies even when the environment has no configured scopes."""
+        mock_load_config.return_value = mock.MagicMock()
+        mock_resolve_environment.return_value = Environment(
+            name="default",
+            host="app.kognic.com",
+            auth_server="https://auth.app.kognic.com",
+            credentials=None,
+        )
+
+        with (
+            mock.patch("kognic.auth.cli.api_request.make_token_provider") as mock_make_provider,
+            mock.patch("kognic.auth.cli.api_request.create_session") as mock_create_session,
+        ):
+            mock_session = mock.MagicMock()
+            mock_response = mock.MagicMock()
+            mock_response.ok = True
+            mock_response.headers = {"Content-Type": "text/plain"}
+            mock_response.text = "ok"
+            mock_session.request.return_value = mock_response
+            mock_create_session.return_value = mock_session
+
+            parsed = self._make_parsed(scopes=["custom:scope"])
+            with mock.patch("builtins.print"):
+                call_run(parsed)
+
+            mock_make_provider.assert_called_once_with(
+                auth=None,
+                auth_host="https://auth.app.kognic.com",
+                token_cache=None,
+                scopes=["custom:scope"],
             )
 
     @mock.patch("kognic.auth.cli.api_request.resolve_environment")
