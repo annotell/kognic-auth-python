@@ -207,7 +207,7 @@ kognic-auth credentials delete --env example
 Make an authenticated HTTP request to a Kognic API. Think of `kog` as a lightweight `curl` that automatically handles authentication and environment resolution.
 
 ```bash
-kog <METHOD> URL [-d DATA] [-H HEADER] [--format FORMAT] [--env NAME] [--env-config-file-path FILE]
+kog <METHOD> URL [-d DATA] [-H HEADER] [--format FORMAT] [--env NAME] [--env-config-file-path FILE] [--scope SCOPE]
 ```
 
 **Options:**
@@ -218,6 +218,7 @@ kog <METHOD> URL [-d DATA] [-H HEADER] [--format FORMAT] [--env NAME] [--env-con
 - `--format` - Output format (default: `json`). See [Output formats](#output-formats) below.
 - `--env` - Force a specific environment (skip URL-based matching)
 - `--env-config-file-path` - Environment config file path (default: `~/.config/kognic/environments.json`)
+- `--scope` - OAuth2 scope to request (repeatable, e.g. `--scope api:read --scope api:write`). See [Per-invocation scopes](#per-invocation-scopes) below.
 
 When `--env` is not provided, the environment is automatically resolved by matching the request URL's hostname against the `host` field of each environment in the config file.
 
@@ -235,6 +236,23 @@ kog post https://app.kognic.com/v1/projects -d '{"name": "test"}'
 # Custom headers
 kog get https://app.kognic.com/v1/projects -H "Accept: application/json"
 ```
+
+#### Per-invocation scopes
+
+An environment can be locked down by configuring `scopes` (e.g. `["api:read"]`) in `environments.json`. For a one-off operation that needs more, pass `--scope` instead of widening the environment config. The flag replaces the environment's configured scopes entirely for that invocation: the token is requested with exactly the scopes given. Scope values are passed to the auth server without client-side validation. Tokens are cached per scope set, so an elevated token is never returned for a request with different scopes.
+
+```bash
+# One-off write from a read-locked environment
+kog post --scope api:read --scope api:write "https://customer-import.app.kognic.com/v1/customer-imports/<uuid>/retrigger"
+```
+
+When running under Kognic's Claude Code tooling, minting a write-capable token is gated by a hook and requires an explicit per-call acknowledgment on the same command line:
+
+```bash
+KOG_SCOPE_ACK=1 kog post --scope api:read --scope api:write "https://customer-import.app.kognic.com/v1/customer-imports/<uuid>/retrigger"
+```
+
+`kog` itself does not read `KOG_SCOPE_ACK`; the gate is enforced by the tooling's hooks.
 
 #### Output formats
 
@@ -284,10 +302,12 @@ These provide a `requests`/`httpx`-compatible interface with enhancements:
 ```python
 from kognic.auth.requests import BaseApiClient
 
+
 class MyApiClient(BaseApiClient):
     def get_resource(self, resource_id: str):
         response = self.session.get(f"https://api.app.kognic.com/v1/resources/{resource_id}")
         return response.json()
+
 
 # Usage with environment variables
 client = MyApiClient()
@@ -307,11 +327,13 @@ client = MyApiClient(auth=("my-client-id", "my-client-secret"), scopes=["api:rea
 ```python
 from kognic.auth.httpx import BaseAsyncApiClient
 
+
 class MyAsyncApiClient(BaseAsyncApiClient):
     async def get_resource(self, resource_id: str):
         session = await self.session
         response = await session.get(f"https://api.app.kognic.com/v1/resources/{resource_id}")
         return response.json()
+
 
 # Usage as async context manager
 async with MyAsyncApiClient() as client:
@@ -339,9 +361,11 @@ serialize_body([1, 2, 3])  # [1, 2, 3]
 # For Pydantic models, convert to dict first
 from pydantic import BaseModel
 
+
 class CreateRequest(BaseModel):
     name: str
     value: int
+
 
 request = CreateRequest(name="test", value=42)
 serialize_body(request.model_dump())  # {"name": "test", "value": 42}
