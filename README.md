@@ -284,10 +284,12 @@ These provide a `requests`/`httpx`-compatible interface with enhancements:
 ```python
 from kognic.auth.requests import BaseApiClient
 
+
 class MyApiClient(BaseApiClient):
     def get_resource(self, resource_id: str):
         response = self.session.get(f"https://api.app.kognic.com/v1/resources/{resource_id}")
         return response.json()
+
 
 # Usage with environment variables
 client = MyApiClient()
@@ -307,11 +309,13 @@ client = MyApiClient(auth=("my-client-id", "my-client-secret"), scopes=["api:rea
 ```python
 from kognic.auth.httpx import BaseAsyncApiClient
 
+
 class MyAsyncApiClient(BaseAsyncApiClient):
     async def get_resource(self, resource_id: str):
         session = await self.session
         response = await session.get(f"https://api.app.kognic.com/v1/resources/{resource_id}")
         return response.json()
+
 
 # Usage as async context manager
 async with MyAsyncApiClient() as client:
@@ -339,9 +343,11 @@ serialize_body([1, 2, 3])  # [1, 2, 3]
 # For Pydantic models, convert to dict first
 from pydantic import BaseModel
 
+
 class CreateRequest(BaseModel):
     name: str
     value: int
+
 
 request = CreateRequest(name="test", value=42)
 serialize_body(request.model_dump())  # {"name": "test", "value": 42}
