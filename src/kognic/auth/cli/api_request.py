@@ -37,6 +37,14 @@ def _create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--env", dest="env_name", help="Force a specific environment (skip URL-based matching)")
     parser.add_argument(
+        "--scope",
+        action="append",
+        dest="scopes",
+        metavar="SCOPE",
+        help="OAuth2 scope to request (repeatable). When given, the token is requested with exactly "
+        "these scopes and the environment's configured scopes are ignored for this invocation.",
+    )
+    parser.add_argument(
         "--format",
         dest="output_format",
         choices=["json", "jsonl", "csv", "tsv", "table"],
@@ -89,7 +97,7 @@ def run(parsed: argparse.Namespace) -> int:
             auth=env.credentials,
             auth_host=env.auth_server,
             token_cache=make_cache(parsed.token_cache),
-            scopes=env.scopes or None,
+            scopes=parsed.scopes or env.scopes or None,
         )
         session = create_session(token_provider=provider)
 
