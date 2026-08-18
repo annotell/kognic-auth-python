@@ -65,6 +65,11 @@ dev = [
     "keyring>=23.0",
 ]
 
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
