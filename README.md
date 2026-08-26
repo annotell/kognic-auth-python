@@ -293,7 +293,9 @@ These provide a `requests`/`httpx`-compatible interface with enhancements:
 
 - OAuth2 authentication with automatic token refresh
 - Automatic JSON serialization for jsonable objects
-- Retry logic for transient errors (502, 503, 504)
+- Retry logic for transient errors (502, 503, 504) on idempotent methods only. `POST` and
+  `PATCH` are never retried, since the request may have taken effect server-side even when
+  the response never arrived — the caller decides whether repeating it is safe.
 - Sunset header handling (logs warnings for deprecated endpoints)
 - Enhanced error messages with response body details
 
