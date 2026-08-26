@@ -20,12 +20,12 @@ import pytest
 import requests
 import urllib3.util.retry
 
-from kognic.auth import RETRYABLE_METHODS
+from kognic.auth import MAX_RETRIES, RETRYABLE_METHODS
 from kognic.auth.httpx.base_client import BaseAsyncApiClient
+from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.requests.base_client import DEFAULT_RETRY, create_session
 
-# One initial request plus three retries.
-TOTAL_ATTEMPTS = 4
+TOTAL_ATTEMPTS = MAX_RETRIES + 1
 
 # Far-future expiry so authlib never attempts a token refresh during a test.
 _NEVER_EXPIRES = 32503680000
@@ -226,8 +226,13 @@ async def _async_token_fetch_attempts(statuses: List[int]) -> tuple[int, bool]:
         await client.close()
 
 
-def _sync_token_fetch_attempts(statuses: List[int]) -> int:
-    """Fetch a token against a failing local auth server and report how many attempts it took."""
+def _sync_token_fetch(statuses: List[int]) -> tuple[int, Optional[requests.RequestException]]:
+    """Fetch a token against a failing local auth server.
+
+    Points the API and auth host at one server and counts every request it receives. With an
+    always-failing sequence that is the token-fetch attempt count, since no resource request is
+    ever reached. Returns ``(attempts, error)`` where error is what reached the caller.
+    """
     sequence = _StatusSequence(statuses)
     handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -238,7 +243,36 @@ def _sync_token_fetch_attempts(statuses: List[int]) -> int:
         session = create_session(auth=("client-id", "client-secret"), auth_host=host)
         try:
             session.get(f"{host}/resource")
-        except Exception:  # noqa: BLE001,S110 - only the attempt count matters here
+        except requests.RequestException as error:
+            return sequence.count, error
+        return sequence.count, None
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def _auth_session_caller_attempts(method: str, statuses: List[int]) -> int:
+    """Count the attempts a caller's own request makes through ``RequestsAuthSession.session``."""
+    sequence = _StatusSequence(statuses)
+    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host = f"http://127.0.0.1:{server.server_port}"
+        provider = RequestsAuthSession(
+            auth=("client-id", "client-secret"),
+            host=host,
+            initial_token={
+                "access_token": "access-token",
+                "token_type": "Bearer",
+                "expires_at": _NEVER_EXPIRES,
+            },
+        )
+        try:
+            provider.session.request(method, f"{host}/resource")
+        except requests.RequestException:
             pass
         return sequence.count
     finally:
@@ -264,7 +298,22 @@ class TestTokenFetchRetry:
         assert succeeded
 
     def test_sync_token_fetch_is_retried(self):
-        assert _sync_token_fetch_attempts(ALWAYS_503) == TOTAL_ATTEMPTS
+        attempts, _ = _sync_token_fetch(ALWAYS_503)
+        assert attempts == TOTAL_ATTEMPTS
+
+    def test_sync_token_fetch_surfaces_the_auth_server_response(self):
+        # An exhausted retry must hand back the auth server's own failure, not a urllib3
+        # RetryError, so the caller can read why authentication failed.
+        _, error = _sync_token_fetch(ALWAYS_503)
+        assert isinstance(error, requests.HTTPError)
+        assert error.response is not None
+        assert error.response.status_code == 503
+        assert "transient" in error.response.text
+
+    def test_caller_post_through_the_auth_session_is_not_retried(self):
+        # The token retry is mounted on the token URL, so a caller's own POST through the same
+        # session keeps the default policy and is never replayed.
+        assert _auth_session_caller_attempts("POST", ALWAYS_503) == 1
 
 
 class TestSharedPolicy:
