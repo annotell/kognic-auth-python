@@ -14,7 +14,14 @@ if TYPE_CHECKING:
 
 import httpx
 
-from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
+from kognic.auth import (
+    DEFAULT_HOST,
+    DEFAULT_TOKEN_ENDPOINT_RELPATH,
+    MAX_RETRIES,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_STATUS_CODES,
+    RETRYABLE_METHODS,
+)
 from kognic.auth._sunset import SunsetHandler, default_sunset_handler, handle_sunset
 from kognic.auth._user_agent import get_user_agent
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
@@ -24,6 +31,17 @@ from kognic.auth.serde import serialize_body
 logger = logging.getLogger(__name__)
 
 _DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
+
+
+def _retry_delay(retry_number: int) -> float:
+    """Seconds to wait before the given 1-based retry.
+
+    Mirrors the exponential backoff urllib3 applies for the sync client, so both clients
+    space their retries identically: the first retry is immediate, then 1s, then 2s.
+    """
+    if retry_number <= 1:
+        return 0.0
+    return RETRY_BACKOFF_FACTOR * (2 ** (retry_number - 1))
 
 
 def _handle_http_error(resp: httpx.Response):
@@ -48,7 +66,8 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
 
     Extends HttpxAuthAsyncClient with:
     - Automatic JSON serialization
-    - Retry logic for transient errors (502, 503, 504)
+    - Retry logic for transient errors (502, 503, 504) on idempotent methods only; POST and
+      PATCH surface the first failure so the caller decides whether repeating is safe
     - Sunset header handling
     - Enhanced error messages
 
@@ -91,7 +110,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             client_name = self.__class__.__name__
 
         # Use a custom transport to set the number of retries for connection errors
-        kwargs.setdefault("transport", httpx.AsyncHTTPTransport(retries=3))
+        kwargs.setdefault("transport", httpx.AsyncHTTPTransport(retries=MAX_RETRIES))
 
         headers = kwargs.pop("headers", {})
         headers.setdefault("User-Agent", get_user_agent(f"python-httpx/{httpx.__version__}", client_name))
@@ -118,17 +137,20 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
                 kwargs["json"] = json_serializer(json)
 
             # Wrap the request in simple retry logic for transient errors
+            method_is_retryable = method.upper() in RETRYABLE_METHODS
+
             async def call_with_simple_retry(attempts):
                 resp = await client_request(method, url, **kwargs)
-                if attempts == 0:
+                if attempts == 0 or not method_is_retryable:
                     return resp
-                if resp.status_code in (502, 503, 504):
-                    logger.warning(f"Server {resp.status_code} error for request to url={url}\nRetrying in 5s...")
-                    await asyncio.sleep(5)
+                if resp.status_code in RETRY_STATUS_CODES:
+                    delay = _retry_delay(MAX_RETRIES - attempts + 1)
+                    logger.warning(f"Server {resp.status_code} error for request to url={url}\nRetrying in {delay}s...")
+                    await asyncio.sleep(delay)
                     return await call_with_simple_retry(attempts - 1)
                 return resp
 
-            resp = await call_with_simple_retry(3)
+            resp = await call_with_simple_retry(MAX_RETRIES)
 
             handle_sunset(resp, sunset_handler)
             _handle_http_error(resp)

@@ -66,7 +66,11 @@ dev = [
     "requests>=2.20,<3",
     "pytest",
     "keyring>=23.0",
+    "pytest-asyncio>=1.4.0",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 120
