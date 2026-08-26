@@ -205,6 +205,68 @@ class TestSyncRetry:
         assert attempts == TOTAL_ATTEMPTS
 
 
+async def _async_token_fetch_attempts(statuses: List[int]) -> tuple[int, bool]:
+    """Fetch a token against a failing auth server, reporting attempts and whether it succeeded."""
+    sequence = _StatusSequence(statuses)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        status = sequence.next_status()
+        if status == 200:
+            return httpx.Response(200, json={"access_token": "granted", "token_type": "Bearer", "expires_in": 3600})
+        return httpx.Response(status, json={"message": "transient"})
+
+    client = BaseAsyncApiClient(auth=("client-id", "client-secret"), transport=httpx.MockTransport(handler))
+    try:
+        try:
+            await client.session
+        except httpx.HTTPStatusError:
+            return sequence.count, False
+        return sequence.count, True
+    finally:
+        await client.close()
+
+
+def _sync_token_fetch_attempts(statuses: List[int]) -> int:
+    """Fetch a token against a failing local auth server and report how many attempts it took."""
+    sequence = _StatusSequence(statuses)
+    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host = f"http://127.0.0.1:{server.server_port}"
+        session = create_session(auth=("client-id", "client-secret"), auth_host=host)
+        try:
+            session.get(f"{host}/resource")
+        except Exception:  # noqa: BLE001,S110 - only the attempt count matters here
+            pass
+        return sequence.count
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+class TestTokenFetchRetry:
+    """The token endpoint is replayable: a client credentials grant leaves no state behind.
+
+    It is the one POST both clients retry, so a transient auth-server failure does not take
+    down every caller holding a client.
+    """
+
+    async def test_async_token_fetch_is_retried(self):
+        attempts, _ = await _async_token_fetch_attempts(ALWAYS_503)
+        assert attempts == TOTAL_ATTEMPTS
+
+    async def test_async_token_fetch_recovers(self):
+        attempts, succeeded = await _async_token_fetch_attempts(RECOVERS_ON_LAST_ATTEMPT)
+        assert attempts == TOTAL_ATTEMPTS
+        assert succeeded
+
+    def test_sync_token_fetch_is_retried(self):
+        assert _sync_token_fetch_attempts(ALWAYS_503) == TOTAL_ATTEMPTS
+
+
 class TestSharedPolicy:
     def test_sync_retry_policy_uses_the_shared_method_set(self):
         # Identity, not equality: urllib3's own default happens to hold the same methods, so

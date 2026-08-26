@@ -126,6 +126,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
 
         # Monkey patch the request method to handle sunset, errors and custom error handling
         client_request = self._oauth_client.request
+        token_url = self.token_url
 
         async def request(method, url, **kwargs):
             if isinstance(url, str) and url.startswith("/"):
@@ -136,8 +137,10 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             if json is not None:
                 kwargs["json"] = json_serializer(json)
 
-            # Wrap the request in simple retry logic for transient errors
-            method_is_retryable = method.upper() in RETRYABLE_METHODS
+            # Wrap the request in simple retry logic for transient errors. The token endpoint is
+            # the one POST worth replaying: a client credentials grant leaves no state behind, so a
+            # transient auth failure should not bring down every caller holding a client.
+            method_is_retryable = method.upper() in RETRYABLE_METHODS or str(url) == token_url
 
             async def call_with_simple_retry(attempts):
                 resp = await client_request(method, url, **kwargs)
