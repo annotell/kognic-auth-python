@@ -20,13 +20,7 @@ from kognic.auth.credentials_parser import ANY_AUTH_TYPE, _check_expiry, _resolv
 
 log = logging.getLogger(__name__)
 
-# The token endpoint is fetched with POST, which is otherwise never replayed. A client
-# credentials grant leaves no state behind, so it is the one POST safe to retry, and retrying
-# it keeps a transient auth failure from bringing down every caller holding a client.
-#
-# raise_on_status is off so that an exhausted retry hands back the auth server's last response.
-# urllib3 would otherwise raise from inside the adapter, replacing that response — and the error
-# body describing why authentication failed — with a RetryError.
+# Token refresh is a POST but known to be safe to retry
 TOKEN_FETCH_RETRY = Retry(
     total=MAX_RETRIES,
     connect=MAX_RETRIES,
@@ -127,9 +121,6 @@ class RequestsAuthSession(AuthClient):
         )
         self.oauth_session.register_compliance_hook("access_token_response", AuthClient.check_rate_limit)
         self.oauth_session.register_compliance_hook("refresh_token_response", AuthClient.check_rate_limit)
-        # Mounted on the token URL alone. requests selects an adapter by longest matching prefix, so
-        # requests a caller makes through this session keep the default policy, and POSTs they issue
-        # are not replayed.
         self.oauth_session.mount(self.token_url, HTTPAdapter(max_retries=TOKEN_FETCH_RETRY))
 
         self._lock = threading.RLock()

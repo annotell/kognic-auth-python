@@ -59,8 +59,6 @@ class TestBaseAsyncApiClientFromEnv(unittest.TestCase):
             }
         )
         try:
-            # HttpxAuthAsyncClient.__init__ is stubbed out, so stand in for the attributes it
-            # would otherwise set on the instance.
             with (
                 patch.object(BaseAsyncApiClient, "_oauth_client", create=True),
                 patch.object(BaseAsyncApiClient, "token_url", "https://auth.demo.kognic.com", create=True),
