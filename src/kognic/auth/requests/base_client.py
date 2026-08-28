@@ -16,7 +16,14 @@ import requests
 from requests import Session
 from requests.adapters import HTTPAdapter, Retry
 
-from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
+from kognic.auth import (
+    DEFAULT_HOST,
+    DEFAULT_TOKEN_ENDPOINT_RELPATH,
+    MAX_RETRIES,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_STATUS_CODES,
+    RETRYABLE_METHODS,
+)
 from kognic.auth._sunset import SunsetHandler, default_sunset_handler, handle_sunset
 from kognic.auth._user_agent import get_user_agent
 from kognic.auth.credentials_parser import ANY_AUTH_TYPE, _resolve_credentials
@@ -29,7 +36,14 @@ from kognic.auth.serde import serialize_body
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_RETRY = Retry(total=3, connect=3, read=3, backoff_factor=0.5, status_forcelist=[502, 503, 504])
+DEFAULT_RETRY = Retry(
+    total=MAX_RETRIES,
+    connect=MAX_RETRIES,
+    read=MAX_RETRIES,
+    backoff_factor=RETRY_BACKOFF_FACTOR,
+    status_forcelist=RETRY_STATUS_CODES,
+    allowed_methods=RETRYABLE_METHODS,
+)
 
 _DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
 
@@ -111,7 +125,7 @@ def create_session(
 
     - OAuth2 authentication with automatic token refresh
     - Automatic JSON serialization for jsonable objects
-    - Default retry logic for transient errors
+    - Default retry logic for transient errors, on idempotent methods only
     - Sunset header handling
     - Always call raise_for_status with enhanced error messages
 
@@ -235,7 +249,8 @@ class BaseApiClient:
     Provides a requests Session with:
     - OAuth2 authentication with automatic token refresh
     - Automatic JSON serialization
-    - Retry logic for transient errors (502, 503, 504)
+    - Retry logic for transient errors (502, 503, 504) on idempotent methods only; POST and
+      PATCH surface the first failure so the caller decides whether repeating is safe
     - Sunset header handling
     - Enhanced error messages
 

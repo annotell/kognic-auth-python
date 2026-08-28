@@ -46,27 +46,31 @@ httpx = [
     "httpx>=0.20,<1"
 ]
 requests = [
-    "requests>=2.20,<3"
+    "requests>=2.33,<3"
 ]
 
 cli = [
     "keyring>=23.0",
-    "requests>=2.20,<3"
+    "requests>=2.33,<3"
 ]
 
 full = [
     "httpx>=0.20,<1",
-    "requests>=2.20,<3",
+    "requests>=2.33,<3",
     "keyring>=23.0"
 ]
 
 [dependency-groups]
 dev = [
     "httpx>=0.20,<1",
-    "requests>=2.20,<3",
+    "requests>=2.33,<3",
     "pytest",
     "keyring>=23.0",
+    "pytest-asyncio>=1.4.0",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 120

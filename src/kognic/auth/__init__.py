@@ -18,6 +18,17 @@ DEFAULT_HOST = "https://auth.app.kognic.com"
 DEFAULT_KOGNIC_PLATFORM = "app.kognic.com"
 DEFAULT_TOKEN_ENDPOINT_RELPATH = "/v1/auth/oauth/token"
 
+# Known Idempotent HTTP methods that can be retried safely.
+RETRYABLE_METHODS = frozenset({"HEAD", "GET", "PUT", "DELETE", "OPTIONS", "TRACE"})
+
+# Growth rate of the delay between retries
+RETRY_BACKOFF_FACTOR = 0.5
+
+RETRY_STATUS_CODES = (502, 503, 504)
+
+# Attempts made after the initial request, for a total of four calls.
+MAX_RETRIES = 3
+
 DEFAULT_ENV_CONFIG_FILE_PATH = (
     Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "kognic" / "environments.json"
 )
