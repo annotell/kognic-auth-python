@@ -20,12 +20,12 @@ import pytest
 import requests
 import urllib3.util.retry
 
-from kognic.auth import RETRYABLE_METHODS
+from kognic.auth import MAX_RETRIES, RETRYABLE_METHODS
 from kognic.auth.httpx.base_client import BaseAsyncApiClient
+from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.requests.base_client import DEFAULT_RETRY, create_session
 
-# One initial request plus three retries.
-TOTAL_ATTEMPTS = 4
+TOTAL_ATTEMPTS = MAX_RETRIES + 1
 
 # Far-future expiry so authlib never attempts a token refresh during a test.
 _NEVER_EXPIRES = 32503680000
@@ -203,6 +203,117 @@ class TestSyncRetry:
     def test_put_is_retried(self):
         attempts, _ = _sync_attempts("PUT", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
+
+
+async def _async_token_fetch_attempts(statuses: List[int]) -> tuple[int, bool]:
+    """Fetch a token against a failing auth server, reporting attempts and whether it succeeded."""
+    sequence = _StatusSequence(statuses)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        status = sequence.next_status()
+        if status == 200:
+            return httpx.Response(200, json={"access_token": "granted", "token_type": "Bearer", "expires_in": 3600})
+        return httpx.Response(status, json={"message": "transient"})
+
+    client = BaseAsyncApiClient(auth=("client-id", "client-secret"), transport=httpx.MockTransport(handler))
+    try:
+        try:
+            await client.session
+        except httpx.HTTPStatusError:
+            return sequence.count, False
+        return sequence.count, True
+    finally:
+        await client.close()
+
+
+def _sync_token_fetch(statuses: List[int]) -> tuple[int, Optional[requests.RequestException]]:
+    """Fetch a token against a failing local auth server.
+
+    Points the API and auth host at one server and counts every request it receives. With an
+    always-failing sequence that is the token-fetch attempt count, since no resource request is
+    ever reached. Returns ``(attempts, error)`` where error is what reached the caller.
+    """
+    sequence = _StatusSequence(statuses)
+    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host = f"http://127.0.0.1:{server.server_port}"
+        session = create_session(auth=("client-id", "client-secret"), auth_host=host)
+        try:
+            session.get(f"{host}/resource")
+        except requests.RequestException as error:
+            return sequence.count, error
+        return sequence.count, None
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def _auth_session_caller_attempts(method: str, statuses: List[int]) -> int:
+    """Count the attempts a caller's own request makes through ``RequestsAuthSession.session``."""
+    sequence = _StatusSequence(statuses)
+    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host = f"http://127.0.0.1:{server.server_port}"
+        provider = RequestsAuthSession(
+            auth=("client-id", "client-secret"),
+            host=host,
+            initial_token={
+                "access_token": "access-token",
+                "token_type": "Bearer",
+                "expires_at": _NEVER_EXPIRES,
+            },
+        )
+        try:
+            provider.session.request(method, f"{host}/resource")
+        except requests.RequestException:
+            pass
+        return sequence.count
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+class TestTokenFetchRetry:
+    """The token endpoint is replayable: a client credentials grant leaves no state behind.
+
+    It is the one POST both clients retry, so a transient auth-server failure does not take
+    down every caller holding a client.
+    """
+
+    async def test_async_token_fetch_is_retried(self):
+        attempts, _ = await _async_token_fetch_attempts(ALWAYS_503)
+        assert attempts == TOTAL_ATTEMPTS
+
+    async def test_async_token_fetch_recovers(self):
+        attempts, succeeded = await _async_token_fetch_attempts(RECOVERS_ON_LAST_ATTEMPT)
+        assert attempts == TOTAL_ATTEMPTS
+        assert succeeded
+
+    def test_sync_token_fetch_is_retried(self):
+        attempts, _ = _sync_token_fetch(ALWAYS_503)
+        assert attempts == TOTAL_ATTEMPTS
+
+    def test_sync_token_fetch_surfaces_the_auth_server_response(self):
+        # An exhausted retry must hand back the auth server's own failure, not a urllib3
+        # RetryError, so the caller can read why authentication failed.
+        _, error = _sync_token_fetch(ALWAYS_503)
+        assert isinstance(error, requests.HTTPError)
+        assert error.response is not None
+        assert error.response.status_code == 503
+        assert "transient" in error.response.text
+
+    def test_caller_post_through_the_auth_session_is_not_retried(self):
+        # The token retry is mounted on the token URL, so a caller's own POST through the same
+        # session keeps the default policy and is never replayed.
+        assert _auth_session_caller_attempts("POST", ALWAYS_503) == 1
 
 
 class TestSharedPolicy:

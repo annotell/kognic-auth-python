@@ -5,12 +5,31 @@ from typing import Callable, List, Optional
 import requests
 from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.requests_client import OAuth2Session
+from requests.adapters import HTTPAdapter, Retry
 
-from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
+from kognic.auth import (
+    DEFAULT_HOST,
+    DEFAULT_TOKEN_ENDPOINT_RELPATH,
+    MAX_RETRIES,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_STATUS_CODES,
+    RETRYABLE_METHODS,
+)
 from kognic.auth.base.auth_client import AuthClient
 from kognic.auth.credentials_parser import ANY_AUTH_TYPE, _check_expiry, _resolve_credentials
 
 log = logging.getLogger(__name__)
+
+# Token refresh is a POST but known to be safe to retry
+TOKEN_FETCH_RETRY = Retry(
+    total=MAX_RETRIES,
+    connect=MAX_RETRIES,
+    read=MAX_RETRIES,
+    backoff_factor=RETRY_BACKOFF_FACTOR,
+    status_forcelist=RETRY_STATUS_CODES,
+    allowed_methods=RETRYABLE_METHODS | {"POST"},
+    raise_on_status=False,
+)
 
 
 class _FixedSession(OAuth2Session):
@@ -102,6 +121,7 @@ class RequestsAuthSession(AuthClient):
         )
         self.oauth_session.register_compliance_hook("access_token_response", AuthClient.check_rate_limit)
         self.oauth_session.register_compliance_hook("refresh_token_response", AuthClient.check_rate_limit)
+        self.oauth_session.mount(self.token_url, HTTPAdapter(max_retries=TOKEN_FETCH_RETRY))
 
         self._lock = threading.RLock()
 

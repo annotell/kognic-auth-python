@@ -59,7 +59,10 @@ class TestBaseAsyncApiClientFromEnv(unittest.TestCase):
             }
         )
         try:
-            with patch.object(BaseAsyncApiClient, "_oauth_client", create=True):
+            with (
+                patch.object(BaseAsyncApiClient, "_oauth_client", create=True),
+                patch.object(BaseAsyncApiClient, "token_url", "https://auth.demo.kognic.com", create=True),
+            ):
                 BaseAsyncApiClient.from_env("demo", env_config_path=config_path)
             mock_init.assert_called_once()
             call_kwargs = mock_init.call_args[1]
