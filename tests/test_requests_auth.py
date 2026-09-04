@@ -1,6 +1,9 @@
 """Tests for requests-layer token refresh and 401 retry behaviour."""
 
+# pyright: reportPrivateUsage=false
+# These tests deliberately exercise this package's internals.
 import unittest
+from typing import List
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -12,7 +15,7 @@ from kognic.auth.requests.base_client import make_token_provider
 from kognic.auth.requests.bearer_auth import KognicBearerAuth
 
 
-def _creds_with_scopes(scopes):
+def _creds_with_scopes(scopes: List[str]) -> ApiCredentials:
     """Return ApiCredentials that declare the given scopes."""
     return ApiCredentials(
         client_id="test-id",
@@ -73,12 +76,12 @@ class TestKognicBearerAuthCall(unittest.TestCase):
 
 
 class TestKognicBearerAuthHandle401(unittest.TestCase):
-    def _make_auth(self, new_token="fresh-token"):
+    def _make_auth(self, new_token: str = "fresh-token") -> tuple[KognicBearerAuth, MagicMock]:
         provider = MagicMock()
         provider.ensure_token.return_value = {"access_token": new_token}
         return KognicBearerAuth(provider), provider
 
-    def _make_401_response(self):
+    def _make_401_response(self) -> tuple[MagicMock, MagicMock]:
         # Don't use spec=requests.Response; `connection` is an internal attribute
         # not listed in the public API so spec would block it.
         resp = MagicMock()
@@ -133,7 +136,7 @@ class TestKognicBearerAuthHandle401(unittest.TestCase):
 
     def test_401_passes_kwargs_to_send(self):
         auth, _ = self._make_auth()
-        resp, retry_resp = self._make_401_response()
+        resp, _retry_resp = self._make_401_response()
 
         auth._handle_401(resp, timeout=5, verify=False)
 

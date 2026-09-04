@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+from kognic.auth.internal import KeyringModule
 
 if TYPE_CHECKING:
     from kognic.auth.credentials import ApiCredentials
@@ -12,10 +14,10 @@ if TYPE_CHECKING:
 SERVICE_NAME = "kognic-credentials"
 DEFAULT_PROFILE = "default"
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 
-def _get_keyring():
+def _get_keyring() -> Optional[KeyringModule]:
     """Return the keyring module if a usable backend is available, else None."""
     try:
         import keyring
@@ -54,7 +56,7 @@ def save_credentials(creds: ApiCredentials, profile: str = DEFAULT_PROFILE) -> N
             "No usable keyring backend available. "
             "Install a keyring backend (e.g. 'pip install keyring') or use environment variables instead."
         )
-    data = {
+    data: Dict[str, Any] = {
         "clientId": creds.client_id,
         "clientSecret": creds.client_secret,
         "email": creds.email,

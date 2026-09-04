@@ -4,8 +4,10 @@ import argparse
 import base64
 import json
 import sys
+from typing import Any, Dict, List
 
 from kognic.auth import DEFAULT_HOST
+from kognic.auth._protocols import SubParsers
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.internal.token_cache import make_cache
 from kognic.auth.requests.base_client import make_token_provider
@@ -13,7 +15,7 @@ from kognic.auth.requests.base_client import make_token_provider
 COMMAND = "get-access-token"
 
 
-def register_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
+def register_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
     token_parser = subparsers.add_parser(
         COMMAND,
         help="Generate an access token for Kognic API authentication",
@@ -61,7 +63,7 @@ def register_parser(subparsers: argparse._SubParsersAction) -> argparse.Argument
     return token_parser
 
 
-def _decode_jwt_part(part: str) -> dict:
+def _decode_jwt_part(part: str) -> Dict[str, Any]:
     padded = part + "=" * (-len(part) % 4)
     return json.loads(base64.urlsafe_b64decode(padded))
 
@@ -82,7 +84,7 @@ def run(parsed: argparse.Namespace) -> int:
     try:
         host = parsed.server
         credentials = parsed.credentials
-        env_scopes = []
+        env_scopes: List[str] = []
 
         if parsed.env_name:
             config = load_kognic_env_config(parsed.env_config_file_path)

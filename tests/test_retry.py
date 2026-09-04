@@ -8,12 +8,14 @@ Timing is deliberately not asserted here: the sync backoff belongs to urllib3 an
 would couple these tests to urllib3 internals. Sleeps are stubbed out for speed only.
 """
 
+# pyright: reportPrivateUsage=false
+# These tests deliberately exercise this package's internals.
 from __future__ import annotations
 
 import asyncio
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable, List, Optional
+from typing import Any, Dict, List, Optional, Type, cast
 
 import httpx
 import pytest
@@ -32,17 +34,20 @@ _NEVER_EXPIRES = 32503680000
 
 
 @pytest.fixture(autouse=True)
-def _no_sleeping(monkeypatch):
+def no_sleeping(monkeypatch: pytest.MonkeyPatch) -> None:
     """Remove real backoff delays so the suite stays fast.
 
     Only the number of attempts is under test, never the delay between them.
     """
 
-    async def _async_noop(_seconds):
+    async def _async_noop(_seconds: float) -> None:
+        return None
+
+    def _noop_sleep(self: urllib3.util.retry.Retry, response: Optional[Any] = None) -> None:
         return None
 
     monkeypatch.setattr(asyncio, "sleep", _async_noop)
-    monkeypatch.setattr(urllib3.util.retry.Retry, "sleep", lambda self, response=None: None)
+    monkeypatch.setattr(urllib3.util.retry.Retry, "sleep", _noop_sleep)
 
 
 class _StatusSequence:
@@ -112,14 +117,14 @@ class _CountingHandler(BaseHTTPRequestHandler):
     do_PUT = _respond
     do_PATCH = _respond
 
-    def log_message(self, format, *args):  # noqa: A002
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         """Silence per-request stderr logging so test output stays pristine."""
 
 
 class _StubTokenProvider:
     """Minimal stand-in for RequestsAuthSession; the tests never exercise token refresh."""
 
-    def ensure_token(self) -> dict:
+    def ensure_token(self) -> Dict[str, Any]:
         return {"access_token": "access-token"}
 
     def invalidate_token(self) -> None:
@@ -129,12 +134,12 @@ class _StubTokenProvider:
 def _sync_attempts(method: str, statuses: List[int]) -> tuple[int, Optional[int]]:
     """Issue one request against a local server and report how many attempts it received."""
     sequence = _StatusSequence(statuses)
-    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    handler: Type[_CountingHandler] = type("_Handler", (_CountingHandler,), {"sequence": sequence})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        session = create_session(token_provider=_StubTokenProvider())
+        session = create_session(token_provider=cast(RequestsAuthSession, _StubTokenProvider()))
         url = f"http://127.0.0.1:{server.server_port}/resource"
         try:
             resp = session.request(method, url)
@@ -234,7 +239,7 @@ def _sync_token_fetch(statuses: List[int]) -> tuple[int, Optional[requests.Reque
     ever reached. Returns ``(attempts, error)`` where error is what reached the caller.
     """
     sequence = _StatusSequence(statuses)
-    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    handler: Type[_CountingHandler] = type("_Handler", (_CountingHandler,), {"sequence": sequence})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -255,7 +260,7 @@ def _sync_token_fetch(statuses: List[int]) -> tuple[int, Optional[requests.Reque
 def _auth_session_caller_attempts(method: str, statuses: List[int]) -> int:
     """Count the attempts a caller's own request makes through ``RequestsAuthSession.session``."""
     sequence = _StatusSequence(statuses)
-    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    handler: Type[_CountingHandler] = type("_Handler", (_CountingHandler,), {"sequence": sequence})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

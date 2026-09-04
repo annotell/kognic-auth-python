@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 
+from kognic.auth._protocols import SubParsers
 from kognic.auth.credentials_parser import parse_credentials
 from kognic.auth.internal.credentials_store import (
     DEFAULT_PROFILE,
@@ -15,7 +16,7 @@ from kognic.auth.internal.credentials_store import (
 COMMAND = "credentials"
 
 
-def register_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
+def register_parser(subparsers: SubParsers) -> argparse.ArgumentParser:
     parser = subparsers.add_parser(
         COMMAND,
         help="Manage stored credentials in the system keyring",

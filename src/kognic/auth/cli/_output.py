@@ -5,13 +5,15 @@ import io
 import json
 from typing import Any
 
+from kognic.auth.serde import is_json_array, is_json_object
+
 
 def _extract_items(body: Any) -> list[Any] | None:
-    if isinstance(body, list):
+    if is_json_array(body):
         return body
-    if isinstance(body, dict):
+    if is_json_object(body):
         values = list(body.values())
-        if len(values) == 1 and isinstance(values[0], list):
+        if len(values) == 1 and is_json_array(values[0]):
             return values[0]
     return None
 
@@ -25,7 +27,7 @@ def _stringify_value(value: Any) -> str:
 def _collect_fieldnames(items: list[Any]) -> list[str]:
     fieldnames: list[str] = []
     for item in items:
-        if isinstance(item, dict):
+        if is_json_object(item):
             for key in item:
                 if key not in fieldnames:
                     fieldnames.append(key)
@@ -40,7 +42,7 @@ def _print_delimited(items: list[Any], *, delimiter: str = ",") -> None:
     writer = csv.DictWriter(buf, fieldnames=fieldnames, delimiter=delimiter)
     writer.writeheader()
     for item in items:
-        if isinstance(item, dict):
+        if is_json_object(item):
             writer.writerow({k: _stringify_value(v) for k, v in item.items()})
         else:
             writer.writerow({"value": _stringify_value(item)})
@@ -55,7 +57,7 @@ def _print_table(items: list[Any]) -> None:
     rows: list[list[str]] = []
     for item in items:
         row = [
-            _stringify_value(item.get(f, "")) if isinstance(item, dict) else _stringify_value(item) for f in fieldnames
+            _stringify_value(item.get(f, "")) if is_json_object(item) else _stringify_value(item) for f in fieldnames
         ]
         rows.append(row)
         for i, cell in enumerate(row):
@@ -68,7 +70,7 @@ def _print_table(items: list[Any]) -> None:
         print("| " + " | ".join(cell.ljust(col_widths[i]) for i, cell in enumerate(row)) + " |")
 
 
-def _print_response(response: Any, *, output_format: str = "json") -> None:
+def print_response(response: Any, *, output_format: str = "json") -> None:
     content_type = response.headers.get("Content-Type", "")
     if "application/json" in content_type:
         try:

@@ -5,12 +5,13 @@ import os
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 from kognic.auth.credentials_parser import (
     ApiCredentials,
-    _check_expiry,
-    get_credentials_from_env,
+    check_expiry,
+    get_credentials_from_env,  # pyright: ignore[reportDeprecated]  # the deprecated wrapper is under test
     parse_credentials,
     resolve_credentials,
 )
@@ -33,7 +34,7 @@ class TestParseCredentials(unittest.TestCase):
         self.assertEqual(creds.user_id, 1)
         self.assertEqual(creds.issuer, "auth.kognic.test")
 
-    def test_parse_from_file(self, tmp_path=None):
+    def test_parse_from_file(self) -> None:
         import tempfile
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -68,7 +69,7 @@ class TestParseCredentials(unittest.TestCase):
         self.assertEqual(creds.created, datetime(2026, 1, 1, tzinfo=timezone.utc))
         self.assertEqual(creds.expires, datetime(2099, 1, 1, tzinfo=timezone.utc))
 
-    def test_parse_does_not_check_expiry(self):
+    def test_parse_does_notcheck_expiry(self):
         """parse_credentials should not raise even if expires is in the past."""
         data = {**VALID_CREDENTIALS_DICT, "expires": "2000-01-01T00:00:00.000000Z"}
         creds = parse_credentials(data)
@@ -83,8 +84,8 @@ class TestParseCredentials(unittest.TestCase):
 class TestGetCredentialsFromEnv(unittest.TestCase):
     @patch.dict(os.environ, {}, clear=True)
     @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
-    def test_no_env_vars_returns_none(self, _):
-        client_id, client_secret = get_credentials_from_env()
+    def test_no_env_vars_returns_none(self, _: MagicMock):
+        client_id, client_secret = get_credentials_from_env()  # pyright: ignore[reportDeprecated]  # the deprecated wrapper is under test
         self.assertIsNone(client_id)
         self.assertIsNone(client_secret)
 
@@ -95,22 +96,22 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
             client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i", name="name"
         ),
     )
-    def test_falls_back_to_keyring(self, _):
-        client_id, client_secret = get_credentials_from_env()
+    def test_falls_back_to_keyring(self, _: MagicMock):
+        client_id, client_secret = get_credentials_from_env()  # pyright: ignore[reportDeprecated]  # the deprecated wrapper is under test
         self.assertEqual(client_id, "kr_id")
         self.assertEqual(client_secret, "kr_secret")
 
     @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id", "KOGNIC_CLIENT_SECRET": "env_secret"}, clear=True)
     @patch("kognic.auth.credentials_parser.credentials_store.load_credentials")
-    def test_env_vars_take_precedence_over_keyring(self, mock_load):
-        client_id, client_secret = get_credentials_from_env()
+    def test_env_vars_take_precedence_over_keyring(self, mock_load: MagicMock):
+        client_id, client_secret = get_credentials_from_env()  # pyright: ignore[reportDeprecated]  # the deprecated wrapper is under test
         self.assertEqual(client_id, "env_id")
         self.assertEqual(client_secret, "env_secret")
         mock_load.assert_not_called()
 
     @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id", "KOGNIC_CLIENT_SECRET": "env_secret"}, clear=True)
     def test_client_id_and_secret_env_vars(self):
-        client_id, client_secret = get_credentials_from_env()
+        client_id, client_secret = get_credentials_from_env()  # pyright: ignore[reportDeprecated]  # the deprecated wrapper is under test
         self.assertEqual(client_id, "env_id")
         self.assertEqual(client_secret, "env_secret")
 
@@ -123,7 +124,7 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
 
         try:
             with patch.dict(os.environ, {"KOGNIC_CREDENTIALS": path}, clear=True):
-                client_id, client_secret = get_credentials_from_env()
+                client_id, client_secret = get_credentials_from_env()  # pyright: ignore[reportDeprecated]  # the deprecated wrapper is under test
                 self.assertEqual(client_id, "test_id")
                 self.assertEqual(client_secret, "test_secret")
         finally:
@@ -136,7 +137,7 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
     )
     def test_kognic_credentials_takes_precedence_over_client_id(self):
         with self.assertRaises(FileNotFoundError):
-            get_credentials_from_env()
+            get_credentials_from_env()  # pyright: ignore[reportDeprecated]  # the deprecated wrapper is under test
 
 
 class TestResolveCredentials(unittest.TestCase):
@@ -147,7 +148,7 @@ class TestResolveCredentials(unittest.TestCase):
 
     def test_auth_tuple_wrong_length_raises(self):
         with self.assertRaises(ValueError) as ctx:
-            resolve_credentials(auth=("only_one",))
+            resolve_credentials(auth=("only_one",))  # pyright: ignore[reportArgumentType]  # bad input is the point
         self.assertIn("tuple", str(ctx.exception))
 
     def test_explicit_client_id_and_secret(self):
@@ -182,7 +183,7 @@ class TestResolveCredentials(unittest.TestCase):
 
     @patch.dict(os.environ, {}, clear=True)
     @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
-    def test_no_credentials_returns_none(self, _):
+    def test_no_credentials_returns_none(self, _: MagicMock):
         client_id, client_secret = resolve_credentials()
         self.assertIsNone(client_id)
         self.assertIsNone(client_secret)
@@ -207,7 +208,7 @@ class TestResolveCredentials(unittest.TestCase):
 
     def test_auth_unsupported_type_raises(self):
         with self.assertRaises(ValueError):
-            resolve_credentials(auth=12345)
+            resolve_credentials(auth=12345)  # pyright: ignore[reportArgumentType]  # bad input is the point
 
     def test_auth_dict(self):
         client_id, client_secret = resolve_credentials(auth=VALID_CREDENTIALS_DICT)
@@ -220,20 +221,20 @@ class TestResolveCredentials(unittest.TestCase):
             client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i", name="name"
         ),
     )
-    def test_auth_keyring_uri(self, mock_load):
+    def test_auth_keyring_uri(self, mock_load: MagicMock):
         client_id, client_secret = resolve_credentials(auth="keyring://myprofile")
         self.assertEqual(client_id, "kr_id")
         self.assertEqual(client_secret, "kr_secret")
         mock_load.assert_called_once_with("myprofile")
 
     @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
-    def test_auth_keyring_uri_not_found_raises(self, _):
+    def test_auth_keyring_uri_not_found_raises(self, _: MagicMock):
         with self.assertRaises(ValueError) as ctx:
             resolve_credentials(auth="keyring://missing-profile")
         self.assertIn("missing-profile", str(ctx.exception))
 
 
-def _make_creds(**kwargs) -> ApiCredentials:
+def _make_creds(**kwargs: Any) -> ApiCredentials:
     return ApiCredentials(
         client_id="id",
         client_secret="secret",
@@ -246,19 +247,19 @@ def _make_creds(**kwargs) -> ApiCredentials:
 
 class TestCheckExpiry(unittest.TestCase):
     def test_no_expires_field(self):
-        _check_expiry(_make_creds())  # should not raise
+        check_expiry(_make_creds())  # should not raise
 
     def test_future_expires(self):
-        _check_expiry(_make_creds(expires=datetime(2099, 1, 1, tzinfo=timezone.utc)))  # should not raise
+        check_expiry(_make_creds(expires=datetime(2099, 1, 1, tzinfo=timezone.utc)))  # should not raise
 
     def test_expired_raises(self):
         with self.assertRaises(ValueError) as ctx:
-            _check_expiry(_make_creds(expires=datetime(2000, 1, 1, tzinfo=timezone.utc)))
+            check_expiry(_make_creds(expires=datetime(2000, 1, 1, tzinfo=timezone.utc)))
         self.assertIn("expired", str(ctx.exception))
 
     def test_expired_with_time(self):
         with self.assertRaises(ValueError):
-            _check_expiry(_make_creds(expires=datetime(2000, 6, 15, 12, 34, 56, 123456, tzinfo=timezone.utc)))
+            check_expiry(_make_creds(expires=datetime(2000, 6, 15, 12, 34, 56, 123456, tzinfo=timezone.utc)))
 
 
 if __name__ == "__main__":

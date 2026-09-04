@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from typing import Any, Callable, Optional
 from unittest import mock
 
 from kognic.auth.credentials_parser import ApiCredentials
@@ -31,7 +32,11 @@ FULL_CREDS = ApiCredentials(
 )
 
 
-def _mock_keyring(get_password=None, set_password=None, delete_password=None):
+def _mock_keyring(
+    get_password: Optional[str] = None,
+    set_password: Optional[Callable[..., Any]] = None,
+    delete_password: Optional[Callable[..., Any]] = None,
+) -> mock.MagicMock:
     """Return a mock keyring module wired to the given side effects / return values."""
     kr = mock.MagicMock()
     if get_password is not None:
@@ -60,7 +65,7 @@ class LoadCredentialsTest(unittest.TestCase):
         kr = _mock_keyring(get_password=data)
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):
             result = load_credentials()
-        self.assertIsInstance(result, ApiCredentials)
+        assert result is not None
         self.assertEqual(result.client_id, "my-id")
         self.assertEqual(result.client_secret, "my-secret")
         self.assertEqual(result.email, "test@kognic.com")

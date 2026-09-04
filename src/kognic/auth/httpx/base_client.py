@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 from kognic.auth.credentials_parser import ANY_AUTH_TYPE
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 
 import httpx
 
@@ -28,7 +29,7 @@ from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env
 from kognic.auth.httpx.async_client import HttpxAuthAsyncClient
 from kognic.auth.serde import serialize_body
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 _DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
 
@@ -44,7 +45,7 @@ def _retry_delay(retry_number: int) -> float:
     return RETRY_BACKOFF_FACTOR * (2 ** (retry_number - 1))
 
 
-def _handle_http_error(resp: httpx.Response):
+def _handle_http_error(resp: httpx.Response) -> None:
     """Try to get the error message from the response and raise with that message."""
     try:
         resp.raise_for_status()
@@ -91,8 +92,8 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         json_serializer: Callable[[Any], Any] = serialize_body,
         sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
         scopes: Optional[List[str]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize the async API client.
 
         Args:
@@ -112,7 +113,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         # Use a custom transport to set the number of retries for connection errors
         kwargs.setdefault("transport", httpx.AsyncHTTPTransport(retries=MAX_RETRIES))
 
-        headers = kwargs.pop("headers", {})
+        headers: Dict[str, str] = kwargs.pop("headers", {})
         headers.setdefault("User-Agent", get_user_agent(f"python-httpx/{httpx.__version__}", client_name))
 
         super().__init__(
@@ -128,7 +129,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         client_request = self._oauth_client.request
         token_url = self.token_url
 
-        async def request(method, url, **kwargs):
+        async def request(method: str, url: Any, **kwargs: Any) -> httpx.Response:
             if isinstance(url, str) and url.startswith("/"):
                 raise ValueError(f"Path must not start with /, got {url}")
 
@@ -139,7 +140,7 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
 
             method_is_retryable = method.upper() in RETRYABLE_METHODS or str(url) == token_url
 
-            async def call_with_simple_retry(attempts):
+            async def call_with_simple_retry(attempts: int) -> httpx.Response:
                 resp = await client_request(method, url, **kwargs)
                 if attempts == 0 or not method_is_retryable:
                     return resp
@@ -156,13 +157,18 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
             _handle_http_error(resp)
             return resp
 
-        self._oauth_client.request = request
+        self._oauth_client.request = request  # pyright: ignore[reportAttributeAccessIssue]
 
     async def __aenter__(self) -> Self:
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         """Async context manager exit."""
         await self.close()
 
@@ -171,8 +177,8 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
         cls,
         env: str,
         *,
-        env_config_path: Union[str, os.PathLike] = "",
-        **kwargs,
+        env_config_path: Union[str, os.PathLike[str]] = "",
+        **kwargs: Any,
     ) -> Self:
         """Create a client from a named environment in the config file.
 

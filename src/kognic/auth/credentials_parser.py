@@ -3,12 +3,15 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
+
+from typing_extensions import deprecated
 
 from kognic.auth.credentials import ApiCredentials
 from kognic.auth.internal import credentials_store
+from kognic.auth.serde import is_json_object
 
-ANY_AUTH_TYPE = Union[str, os.PathLike, tuple, "ApiCredentials", dict, None]
+ANY_AUTH_TYPE = Union[str, "os.PathLike[str]", Tuple[str, str], "ApiCredentials", Dict[str, Any], None]
 
 REQUIRED_CREDENTIALS_FILE_KEYS = [
     "clientId",
@@ -39,7 +42,7 @@ def _parse_optional_datetime(s: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _check_expiry(creds: ApiCredentials) -> None:
+def check_expiry(creds: ApiCredentials) -> None:
     """Raise ValueError if the credentials have an expires field that is in the past."""
     if creds.expires is None:
         return
@@ -47,18 +50,20 @@ def _check_expiry(creds: ApiCredentials) -> None:
         raise ValueError(f"Credentials expired at {creds.expires.isoformat()}")
 
 
-def parse_credentials(path: Union[str, os.PathLike, dict]) -> ApiCredentials:
+def parse_credentials(path: Union[str, os.PathLike[str], Dict[str, Any]]) -> ApiCredentials:
+    raw: Any
     if isinstance(path, dict):
-        credentials = path
+        raw = path
     else:
         absolute_path = Path(path).expanduser().resolve()
         try:
-            credentials = json.loads(absolute_path.read_text())
+            raw = json.loads(absolute_path.read_text())
         except FileNotFoundError:
             raise FileNotFoundError(f"Could not find API Credentials file at {path}") from None
 
-    if not isinstance(credentials, dict):
+    if not is_json_object(raw):
         raise AttributeError(f"Could not json dict from {path}")
+    credentials = raw
 
     for k in REQUIRED_CREDENTIALS_FILE_KEYS:
         if k not in credentials:
@@ -77,11 +82,9 @@ def parse_credentials(path: Union[str, os.PathLike, dict]) -> ApiCredentials:
     )
 
 
-def get_credentials_from_env() -> tuple[Optional[str], Optional[str]]:
-    """
-    Deprecated
-    :return:
-    """
+@deprecated("get_credentials_from_env is deprecated; use get_credentials_from_system() instead")
+def get_credentials_from_env() -> Tuple[Optional[str], Optional[str]]:
+    """Deprecated. Use :func:`get_credentials_from_system`, which returns the full credentials."""
     creds = get_credentials_from_system()
     if creds:
         return creds.client_id, creds.client_secret
@@ -153,7 +156,7 @@ def resolve_any_credentials(auth: ANY_AUTH_TYPE) -> ApiCredentials:
     return creds
 
 
-def _resolve_credentials(
+def resolve_api_credentials(
     auth: ANY_AUTH_TYPE = None, client_id: Optional[str] = None, client_secret: Optional[str] = None
 ) -> Optional[ApiCredentials]:
     """
@@ -174,7 +177,7 @@ def _resolve_credentials(
 
 def resolve_credentials(
     auth: ANY_AUTH_TYPE = None, client_id: Optional[str] = None, client_secret: Optional[str] = None
-) -> tuple[Optional[str], Optional[str]]:
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Resolve credentials from either an auth input (which can be a variety of types)
     or from explicit client_id and client_secret parameters.
@@ -184,14 +187,14 @@ def resolve_credentials(
     :param client_secret:
     :return:
     """
-    creds = _resolve_credentials(auth, client_id, client_secret)
+    creds = resolve_api_credentials(auth, client_id, client_secret)
     if creds is None:
         return None, None
     return creds.client_id, creds.client_secret
 
 
 if __name__ == "__main__":
-    creds = get_credentials_from_system()
+    creds: Optional[ApiCredentials] = get_credentials_from_system()
     if creds:
         # Avoid printing secrets; only indicate that credentials were loaded.
         print(f"Loaded credentials for client_id={creds.client_id!r}")

@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, Dict
 
 from kognic.auth import DEFAULT_HOST
 from kognic.auth.env_config import Environment, KognicEnvConfig, load_kognic_env_config, resolve_environment
@@ -42,6 +43,7 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(prod.name, "production")
         self.assertEqual(prod.host, "app.kognic.com")
         self.assertEqual(prod.auth_server, "https://auth.app.kognic.com")
+        assert prod.credentials is not None
         self.assertTrue(prod.credentials.endswith("creds.json"))
         self.assertNotIn("~", prod.credentials)
 
@@ -100,7 +102,7 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(config.environments["production"].credentials, "keyring://production")
 
     def test_empty_contexts(self):
-        data = {"environments": {}}
+        data: Dict[str, Any] = {"environments": {}}
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(data, f)
             f.flush()
