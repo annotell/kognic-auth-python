@@ -4,16 +4,20 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any, Dict
+from unittest.mock import MagicMock, patch
 
 
 class TestBaseAsyncApiClient(unittest.TestCase):
     @patch("kognic.auth.httpx.base_client.HttpxAuthAsyncClient.__init__", return_value=None)
-    def test_client_name_auto(self, mock_init):
+    def test_client_name_auto(self, mock_init: MagicMock):
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
         # Need to manually set _oauth_client since we mocked __init__
-        with patch.object(BaseAsyncApiClient, "__init__", lambda self, **kwargs: None):
+        def _noop_init(self: BaseAsyncApiClient, **kwargs: Any) -> None:
+            return None
+
+        with patch.object(BaseAsyncApiClient, "__init__", _noop_init):
             client = BaseAsyncApiClient.__new__(BaseAsyncApiClient)
             # Simulate what __init__ would do for client_name
             client_name = "auto"
@@ -25,7 +29,8 @@ class TestBaseAsyncApiClient(unittest.TestCase):
         from kognic.auth.httpx.async_client import HttpxAuthAsyncClient
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
-        self.assertTrue(issubclass(BaseAsyncApiClient, HttpxAuthAsyncClient))
+        # Deliberately asserted at runtime: the inheritance is part of the public contract.
+        self.assertTrue(issubclass(BaseAsyncApiClient, HttpxAuthAsyncClient))  # pyright: ignore[reportUnnecessaryIsInstance]
 
     def test_has_context_manager_methods(self):
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
@@ -36,7 +41,7 @@ class TestBaseAsyncApiClient(unittest.TestCase):
 
 
 class TestBaseAsyncApiClientFromEnv(unittest.TestCase):
-    def _write_config(self, data):
+    def _write_config(self, data: Dict[str, Any]) -> str:
         f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
         json.dump(data, f)
         f.flush()
@@ -44,7 +49,7 @@ class TestBaseAsyncApiClientFromEnv(unittest.TestCase):
         return f.name
 
     @patch("kognic.auth.httpx.base_client.HttpxAuthAsyncClient.__init__", return_value=None)
-    def test_from_env_passes_resolved_values(self, mock_init):
+    def test_from_env_passes_resolved_values(self, mock_init: MagicMock):
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
         config_path = self._write_config(

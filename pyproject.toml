@@ -14,7 +14,8 @@ authors = [
 ]
 description = "Kognic Authentication"
 dependencies = [
-    "authlib>=0.14.1,<1.8"
+    "authlib>=0.14.1,<1.8",
+    "typing-extensions>=4.5"
 ]
 requires-python=">=3.10"
 readme = "README.md"
@@ -34,6 +35,9 @@ source = "https://github.com/annotell/kognic-auth-python"
 [project.scripts]
 kognic-auth = "kognic.auth.cli:main"
 kog = "kognic.auth.cli.api_request:main"
+
+[tool.setuptools.package-data]
+"kognic.auth" = ["py.typed"]
 
 [tool.setuptools_scm]
 version_file = "src/kognic/auth/_version.py"
@@ -67,7 +71,15 @@ dev = [
     "pytest",
     "keyring>=23.0",
     "pytest-asyncio>=1.4.0",
+    "pyright>=1.1.406,<2",
 ]
+
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["src", "tests"]
+strict = ["src", "tests"]
+stubPath = "stubs"
+reportDeprecated = "error"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import requests
 from requests.auth import AuthBase
@@ -25,7 +25,7 @@ class KognicBearerAuth(AuthBase):
         r.register_hook("response", self._handle_401)
         return r
 
-    def _handle_401(self, r: requests.Response, **kwargs) -> requests.Response:
+    def _handle_401(self, r: requests.Response, **kwargs: Any) -> requests.Response:
         if r.status_code != 401:
             return r
         self._provider.invalidate_token()

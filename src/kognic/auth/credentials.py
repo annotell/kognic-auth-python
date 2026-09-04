@@ -13,4 +13,4 @@ class ApiCredentials:
     name: str = "API Credentials"
     created: Optional[datetime] = None
     expires: Optional[datetime] = None
-    scopes: List[str] = field(default_factory=list)
+    scopes: List[str] = field(default_factory=list[str])

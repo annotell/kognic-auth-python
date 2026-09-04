@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Any, Dict, Optional
 
 SERVICE_NAME = "kognic-auth"
 
@@ -20,7 +20,7 @@ def make_key(auth_server: str, client_id: str, scopes: Optional[str] = None) -> 
     return key
 
 
-def is_valid(token: dict) -> bool:
+def is_valid(token: Dict[str, Any]) -> bool:
     expires_at = token.get("expires_at")
     if expires_at is None:
         return False
@@ -31,11 +31,11 @@ class TokenCache(ABC):
     """Abstract base class for token caches."""
 
     @abstractmethod
-    def load(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> Optional[dict]:
+    def load(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Return a non-expired token dict, or None."""
 
     @abstractmethod
-    def save(self, auth_server: str, client_id: str, token: dict, scopes: Optional[str] = None) -> None:
+    def save(self, auth_server: str, client_id: str, token: Dict[str, Any], scopes: Optional[str] = None) -> None:
         """Persist a token dict. Silently ignores errors."""
 
     @abstractmethod

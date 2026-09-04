@@ -3,11 +3,23 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from types import ModuleType
+from typing import Callable, Protocol
 
+from kognic.auth._protocols import SubParsers
 from kognic.auth.cli import credentials, get_access_token
 
-_SUBCOMMANDS: list[ModuleType] = [get_access_token, credentials]
+
+class _Subcommand(Protocol):
+    """Structural type of a CLI subcommand module."""
+
+    @property
+    def COMMAND(self) -> str: ...
+
+    register_parser: Callable[[SubParsers], argparse.ArgumentParser]
+    run: Callable[[argparse.Namespace], int]
+
+
+_SUBCOMMANDS: list[_Subcommand] = [get_access_token, credentials]
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -24,7 +36,7 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _configure_logging(verbose: bool = False) -> None:
+def configure_logging(verbose: bool = False) -> None:
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     logging.getLogger("kognic.auth").addHandler(handler)
@@ -34,7 +46,7 @@ def _configure_logging(verbose: bool = False) -> None:
 def main(args: list[str] | None = None) -> int:
     parser = create_parser()
     parsed = parser.parse_args(args)
-    _configure_logging(verbose=parsed.verbose)
+    configure_logging(verbose=parsed.verbose)
 
     for subcommand in _SUBCOMMANDS:
         if parsed.command == subcommand.COMMAND:

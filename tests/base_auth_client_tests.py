@@ -1,15 +1,16 @@
 import datetime
 import unittest
+from typing import Any, Dict, Optional
 
 from kognic.auth.base.auth_client import AuthClient
 
 
 class TestAuthClient(AuthClient):
-    def __init__(self, token: dict):
+    def __init__(self, token: Dict[str, Any]) -> None:
         self._token = token
 
     @property
-    def token(self):
+    def token(self) -> Optional[Dict[str, Any]]:
         return self._token
 
 

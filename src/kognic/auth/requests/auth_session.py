@@ -1,11 +1,12 @@
 import logging
 import threading
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import requests
 from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.requests_client import OAuth2Session
-from requests.adapters import HTTPAdapter, Retry
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from kognic.auth import (
     DEFAULT_HOST,
@@ -16,9 +17,9 @@ from kognic.auth import (
     RETRYABLE_METHODS,
 )
 from kognic.auth.base.auth_client import AuthClient
-from kognic.auth.credentials_parser import ANY_AUTH_TYPE, _check_expiry, _resolve_credentials
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE, check_expiry, resolve_api_credentials
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 # Token refresh is a POST but known to be safe to retry
 TOKEN_FETCH_RETRY = Retry(
@@ -46,9 +47,9 @@ class _FixedSession(OAuth2Session):
     session self-heals transparently.
     """
 
-    def refresh_token(self, url, **kwargs):
+    def refresh_token(self, url: Optional[str] = None, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         try:
-            super(_FixedSession, self).refresh_token(url, **kwargs)
+            return super(_FixedSession, self).refresh_token(url, *args, **kwargs)
         except AuthlibBaseError as e:
             if e.error == "invalid_token":
                 log.info("Refresh token expired, resetting auth session")
@@ -56,7 +57,8 @@ class _FixedSession(OAuth2Session):
             raise
         except requests.exceptions.HTTPError as e:
             # with authlib >= 1.0.0
-            if e.response.status_code == 401 and "invalid_token" == e.response.json().get("error"):
+            response = e.response
+            if response is not None and response.status_code == 401 and response.json().get("error") == "invalid_token":
                 log.info("Refresh token expired, resetting auth session")
                 return self.fetch_token()
             raise
@@ -76,11 +78,11 @@ class RequestsAuthSession(AuthClient):
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
-        initial_token: Optional[dict] = None,
-        on_token_updated: Optional[Callable[[dict], None]] = None,
+        initial_token: Optional[Dict[str, Any]] = None,
+        on_token_updated: Optional[Callable[[Dict[str, Any]], None]] = None,
         scopes: Optional[List[str]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize the auth session.
 
         Args:
@@ -94,12 +96,12 @@ class RequestsAuthSession(AuthClient):
             scopes: OAuth2 scopes to request, e.g. ["api:read", "api:write"].
             **kwargs: Additional params to pass into Client Constructor
         """
-        self.host = host
-        self.token_url = f"{host}{token_endpoint}"
+        self.host: str = host
+        self.token_url: str = f"{host}{token_endpoint}"
 
-        creds = _resolve_credentials(auth, client_id, client_secret)
+        creds = resolve_api_credentials(auth, client_id, client_secret)
         if creds:
-            _check_expiry(creds)
+            check_expiry(creds)
         client_id = creds.client_id if creds else None
         client_secret = creds.client_secret if creds else None
         self._client_id = client_id
@@ -108,7 +110,7 @@ class RequestsAuthSession(AuthClient):
         if scopes is None and creds and creds.scopes:
             scopes = creds.scopes
 
-        self.oauth_session = _FixedSession(
+        self.oauth_session: _FixedSession = _FixedSession(
             client_id=client_id,
             client_secret=client_secret,
             token_endpoint_auth_method="client_secret_post",
@@ -130,28 +132,33 @@ class RequestsAuthSession(AuthClient):
         return self._client_id
 
     @property
-    def token(self):
+    def token(self) -> Optional[Dict[str, Any]]:
         return self.oauth_session.token
 
-    def _update_token(self, token, access_token=None, refresh_token=None):
+    def _update_token(
+        self, token: Dict[str, Any], access_token: Optional[str] = None, refresh_token: Optional[str] = None
+    ) -> None:
         self._log_new_token()
         if self._on_token_updated is not None:
             self._on_token_updated(token)
 
-    def ensure_token(self) -> dict:
+    def ensure_token(self) -> Dict[str, Any]:
         """Return a valid token, fetching one if needed. Thread-safe."""
         if not self.token:
             with self._lock:
                 if not self.token:
                     token = self.oauth_session.fetch_access_token(url=self.token_url)
                     self._update_token(token)
-        return self.token
+        token = self.token
+        if token is None:
+            raise RuntimeError(f"Failed to obtain an access token from {self.token_url}")
+        return token
 
     def invalidate_token(self) -> None:
         """Clear the cached token so the next ensure_token() call fetches a fresh one."""
         self.oauth_session.token = None
 
     @property
-    def session(self):
+    def session(self) -> requests.Session:
         self.ensure_token()
         return self.oauth_session.session

@@ -2,7 +2,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 from urllib.parse import urlparse
 
 from kognic.auth import DEFAULT_ENV_CONFIG_FILE_PATH, DEFAULT_HOST, DEFAULT_KOGNIC_PLATFORM
@@ -14,16 +14,16 @@ class Environment:
     host: str
     auth_server: str
     credentials: Optional[str] = None
-    scopes: List[str] = field(default_factory=list)
+    scopes: List[str] = field(default_factory=list[str])
 
 
 @dataclass
 class KognicEnvConfig:
-    environments: dict = field(default_factory=dict)
+    environments: Dict[str, "Environment"] = field(default_factory=dict[str, "Environment"])
     default_environment: Optional[str] = None
 
 
-def load_kognic_env_config(path: Union[str, os.PathLike] = DEFAULT_ENV_CONFIG_FILE_PATH) -> KognicEnvConfig:
+def load_kognic_env_config(path: Union[str, os.PathLike[str]] = DEFAULT_ENV_CONFIG_FILE_PATH) -> KognicEnvConfig:
     """Load config from JSON file. Returns empty Config if file doesn't exist."""
     expanded = Path(path).expanduser()
     if not expanded.exists():
@@ -31,7 +31,7 @@ def load_kognic_env_config(path: Union[str, os.PathLike] = DEFAULT_ENV_CONFIG_FI
 
     data = json.loads(expanded.read_text())
 
-    environments = {}
+    environments: Dict[str, Environment] = {}
     for name, env_data in data.get("environments", {}).items():
         credentials = env_data.get("credentials")
         if credentials and not credentials.startswith("keyring://"):

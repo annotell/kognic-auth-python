@@ -6,12 +6,13 @@ import httpx
 import pytest
 import requests
 
+from kognic.auth._protocols import Response
 from kognic.auth._sunset import DATETIME_FMT, handle_sunset
 
 SUNSET_HEADER = "sunset-date"
 
 
-def date_to_str(date: datetime):
+def date_to_str(date: datetime) -> str:
     return date.strftime(DATETIME_FMT)
 
 
@@ -29,7 +30,7 @@ def make_requests_response(sunset_date: Optional[str]) -> requests.Response:
     response = requests.Response()
     if sunset_date:
         response.headers[SUNSET_HEADER] = sunset_date
-    response.request = requests.Request("GET", url)
+    response.request = requests.Request("GET", url).prepare()
     return response
 
 
@@ -38,7 +39,9 @@ def make_httpx_response(sunset_date: Optional[str]) -> httpx.Response:
     return httpx.Response(status_code=200, headers=headers, request=httpx.Request("GET", url))
 
 
-def run_test_with_response(caplog, response, expected_log_level: Optional[str]):
+def run_test_with_response(
+    caplog: pytest.LogCaptureFixture, response: Response, expected_log_level: Optional[str]
+) -> None:
     handle_sunset(response)
     if expected_log_level:
         log_record = caplog.records[0]
@@ -49,7 +52,7 @@ def run_test_with_response(caplog, response, expected_log_level: Optional[str]):
 
 class TestSunsetDateRequests(TestCase):
     @pytest.fixture(autouse=True)
-    def inject_fixtures(self, caplog):
+    def inject_fixtures(self, caplog: pytest.LogCaptureFixture) -> None:
         self._caplog = caplog
 
     def test_when_sunset_date_not_set(self):
@@ -83,7 +86,7 @@ class TestSunsetDateRequests(TestCase):
 
 class TestSunsetDateHttpx(TestCase):
     @pytest.fixture(autouse=True)
-    def inject_fixtures(self, caplog):
+    def inject_fixtures(self, caplog: pytest.LogCaptureFixture) -> None:
         self._caplog = caplog
 
     def test_when_sunset_date_not_set(self):

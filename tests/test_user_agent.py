@@ -1,5 +1,7 @@
 """Unit tests for User-Agent handling."""
 
+# pyright: reportPrivateUsage=false
+# These tests deliberately exercise this package's internals.
 import unittest
 
 from kognic.auth import __version__

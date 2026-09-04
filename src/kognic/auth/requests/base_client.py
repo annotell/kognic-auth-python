@@ -5,16 +5,18 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from importlib.metadata import version
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 from weakref import WeakValueDictionary
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 
 import requests
 from requests import Session
-from requests.adapters import HTTPAdapter, Retry
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from kognic.auth import (
     DEFAULT_HOST,
@@ -26,14 +28,17 @@ from kognic.auth import (
 )
 from kognic.auth._sunset import SunsetHandler, default_sunset_handler, handle_sunset
 from kognic.auth._user_agent import get_user_agent
-from kognic.auth.credentials_parser import ANY_AUTH_TYPE, _resolve_credentials
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE, resolve_api_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.internal.token_cache import TokenCache
 from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.requests.bearer_auth import KognicBearerAuth
 from kognic.auth.serde import serialize_body
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
+
+# requests exposes __version__ publicly but typeshed does not re-export it.
+_REQUESTS_VERSION: str = version("requests")
 
 
 DEFAULT_RETRY = Retry(
@@ -48,7 +53,7 @@ DEFAULT_RETRY = Retry(
 _DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
 
 
-def _check_response(resp: requests.Response, sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER):
+def _check_response(resp: requests.Response, sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER) -> None:
     """Handle sunset headers and raise for status with enhanced error messages."""
     handle_sunset(resp, sunset_handler)
     try:
@@ -67,16 +72,16 @@ def _check_response(resp: requests.Response, sunset_handler: Optional[SunsetHand
         ) from e
 
 
-def _set_session_user_agent(session: Session, client_name: Optional[str] = None):
+def _set_session_user_agent(session: Session, client_name: Optional[str] = None) -> None:
     """Set the User-Agent header for the session, including the client name if provided."""
-    session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", client_name)
+    session.headers["User-Agent"] = get_user_agent(f"requests/{_REQUESTS_VERSION}", client_name)
 
 
 def _monkey_patch_send(
     session: Session,
     json_serializer: Callable[[Any], Any],
     sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
-):
+) -> None:
     """
     Monkey patch to serialize JSON and validate paths
     :param session:
@@ -85,8 +90,8 @@ def _monkey_patch_send(
     """
     vanilla_prep = session.prepare_request
 
-    def prepare_request(req, *args, **kwargs):
-        if req.url.startswith("/"):
+    def prepare_request(req: requests.Request, *args: Any, **kwargs: Any) -> requests.PreparedRequest:
+        if isinstance(req.url, str) and req.url.startswith("/"):
             raise ValueError(f"Path must not start with /, got {req.url}")
 
         # Accept anything jsonable as json, serialize it
@@ -95,17 +100,17 @@ def _monkey_patch_send(
 
         return vanilla_prep(req, *args, **kwargs)
 
-    session.prepare_request = prepare_request
+    session.prepare_request = prepare_request  # pyright: ignore[reportAttributeAccessIssue]
 
     # Monkey patch to always raise for status and handle errors
     vanilla_send = session.send
 
-    def send_request(req, *args, **kwargs):
+    def send_request(req: requests.PreparedRequest, *args: Any, **kwargs: Any) -> requests.Response:
         resp = vanilla_send(req, *args, **kwargs)
         _check_response(resp, sunset_handler)
         return resp
 
-    session.send = send_request
+    session.send = send_request  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def create_session(
@@ -115,8 +120,8 @@ def create_session(
     auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     client_name: Optional[str] = None,
     json_serializer: Callable[[Any], Any] = serialize_body,
-    initial_token: Optional[dict] = None,
-    on_token_updated: Optional[Callable[[dict], None]] = None,
+    initial_token: Optional[Dict[str, Any]] = None,
+    on_token_updated: Optional[Callable[[Dict[str, Any]], None]] = None,
     token_provider: Optional[RequestsAuthSession] = None,
     sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
     scopes: Optional[List[str]] = None,
@@ -186,7 +191,7 @@ def make_token_provider(
     Returns:
         Configured RequestsAuthSession
     """
-    credentials = _resolve_credentials(auth)
+    credentials = resolve_api_credentials(auth)
     client_id = credentials.client_id if credentials else None
     scope_str = " ".join(scopes) if scopes else None
     return RequestsAuthSession(
@@ -201,7 +206,7 @@ def make_token_provider(
     )
 
 
-_provider_pool: WeakValueDictionary[tuple, RequestsAuthSession] = WeakValueDictionary()
+_provider_pool: WeakValueDictionary[Tuple[Any, ...], RequestsAuthSession] = WeakValueDictionary()
 _provider_pool_lock = threading.Lock()
 
 
@@ -217,7 +222,7 @@ def _get_shared_provider(
     Providers are keyed by (client_id, auth_host, auth_token_endpoint, cache_type, scopes) and held
     weakly, so they are GC'd once no BaseApiClient instances reference them.
     """
-    credentials = _resolve_credentials(auth)
+    credentials = resolve_api_credentials(auth)
     client_id = credentials.client_id if credentials else None
     client_secret = credentials.client_secret if credentials else None
 
@@ -278,7 +283,7 @@ class BaseApiClient:
         token_cache: Optional[TokenCache] = None,
         sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
         scopes: Optional[List[str]] = None,
-    ):
+    ) -> None:
         """Initialize the API client.
 
         Args:
@@ -335,8 +340,8 @@ class BaseApiClient:
         cls,
         env: str,
         *,
-        env_config_path: Union[str, os.PathLike] = "",
-        **kwargs,
+        env_config_path: Union[str, os.PathLike[str]] = "",
+        **kwargs: Any,
     ) -> Self:
         """Create a client from a named environment in the config file.
 
