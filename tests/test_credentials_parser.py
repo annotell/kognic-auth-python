@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from kognic.auth.credentials_parser import (
     ApiCredentials,
-    _check_expiry,
+    _check_expiry,  # pyright: ignore[reportPrivateUsage]  # deliberately the back-compat alias
     get_credentials_from_env,
     parse_credentials,
     resolve_credentials,

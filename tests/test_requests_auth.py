@@ -1,3 +1,6 @@
+# These tests deliberately assert on internals (the underlying oauth session), so private access is
+# expected here. The rule stays on for src.
+# pyright: reportPrivateUsage=false
 """Tests for requests-layer token refresh and 401 retry behaviour."""
 
 import unittest

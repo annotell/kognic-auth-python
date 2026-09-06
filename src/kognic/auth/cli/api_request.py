@@ -14,7 +14,7 @@ from kognic.auth.requests.base_client import create_session, make_token_provider
 METHODS = ["get", "post", "put", "patch", "delete", "head", "options"]
 
 
-def _create_parser() -> argparse.ArgumentParser:
+def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kog",
         description="Make authenticated HTTP requests to Kognic APIs",
@@ -120,7 +120,7 @@ def run(parsed: argparse.Namespace) -> int:
 
 
 def main(args: list[str] | None = None) -> None:
-    parser = _create_parser()
+    parser = create_parser()
     parsed = parser.parse_args(args)
     configure_logging(verbose=parsed.verbose)
     sys.exit(run(parsed))

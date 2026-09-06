@@ -1,3 +1,6 @@
+# These tests deliberately assert on internals (cached sessions and shared token providers), so private access is
+# expected here. The rule stays on for src.
+# pyright: reportPrivateUsage=false
 """Unit tests for BaseApiClient (sync client)."""
 
 import json
