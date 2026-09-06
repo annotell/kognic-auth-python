@@ -56,7 +56,8 @@ class _FixedSession(OAuth2Session):
             raise
         except requests.exceptions.HTTPError as e:
             # with authlib >= 1.0.0
-            if e.response.status_code == 401 and "invalid_token" == e.response.json().get("error"):
+            response = e.response
+            if response is not None and response.status_code == 401 and response.json().get("error") == "invalid_token":
                 log.info("Refresh token expired, resetting auth session")
                 return self.fetch_token()
             raise

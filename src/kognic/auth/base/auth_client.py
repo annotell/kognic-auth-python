@@ -24,8 +24,10 @@ class AuthClient:
         For introspection, no validation is done.
         :return:
         """
-        if self.token:
-            return json.loads(base64.b64decode(self.access_token.split(".")[1] + "=="))
+        access_token = self.access_token
+        if access_token is None:
+            return None
+        return json.loads(base64.b64decode(access_token.split(".")[1] + "=="))
 
     @property
     def expires_at(self):
