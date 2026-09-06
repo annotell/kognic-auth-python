@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, TypeVar
 
 from kognic.auth._protocols import SupportsStatusCode
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 _ResponseT = TypeVar("_ResponseT", bound=SupportsStatusCode)
 

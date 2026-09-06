@@ -24,7 +24,7 @@ from kognic.auth.base.auth_client import AuthClient
 from kognic.auth.credentials_parser import ANY_AUTH_TYPE
 from kognic.auth.internal.credentials import check_expiry, resolve_credentials
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 # Token refresh is a POST but known to be safe to retry
 TOKEN_FETCH_RETRY = Retry(
@@ -105,8 +105,8 @@ class RequestsAuthSession(AuthClient):
             scopes: OAuth2 scopes to request, e.g. ["api:read", "api:write"].
             **kwargs: Additional params to pass into Client Constructor
         """
-        self.host = host
-        self.token_url = f"{host}{token_endpoint}"
+        self.host: str = host
+        self.token_url: str = f"{host}{token_endpoint}"
 
         creds = resolve_credentials(auth, client_id, client_secret)
         if creds:
@@ -119,7 +119,7 @@ class RequestsAuthSession(AuthClient):
         if scopes is None and creds and creds.scopes:
             scopes = creds.scopes
 
-        self.oauth_session = _FixedSession(
+        self.oauth_session: _FixedSession = _FixedSession(
             client_id=client_id,
             client_secret=client_secret,
             token_endpoint_auth_method="client_secret_post",

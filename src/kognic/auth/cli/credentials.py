@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from typing import TYPE_CHECKING
 
 from kognic.auth.credentials_parser import parse_credentials
 from kognic.auth.internal.credentials_store import (
@@ -12,10 +13,13 @@ from kognic.auth.internal.credentials_store import (
     save_credentials,
 )
 
+if TYPE_CHECKING:
+    from kognic.auth.cli import SubParsers
+
 COMMAND = "credentials"
 
 
-def register_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
+def register_parser(subparsers: "SubParsers") -> argparse.ArgumentParser:
     parser = subparsers.add_parser(
         COMMAND,
         help="Manage stored credentials in the system keyring",

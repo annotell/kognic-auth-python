@@ -25,7 +25,7 @@ from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env
 from kognic.auth.httpx.async_client import HttpxAuthAsyncClient
 from kognic.auth.serde import serialize_body
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 _DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
 

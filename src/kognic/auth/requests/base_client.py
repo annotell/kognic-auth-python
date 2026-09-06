@@ -35,7 +35,7 @@ from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.requests.bearer_auth import KognicBearerAuth
 from kognic.auth.serde import serialize_body
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 DEFAULT_RETRY = Retry(

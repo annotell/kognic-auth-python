@@ -4,10 +4,17 @@ import argparse
 import logging
 import sys
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 from kognic.auth.cli import credentials, get_access_token
 
 _SUBCOMMANDS: list[ModuleType] = [get_access_token, credentials]
+
+if TYPE_CHECKING:
+    # argparse exposes no public name for what add_subparsers() returns, and typeshed
+    # offers no alias either, so the private type is the only way to annotate it. It is
+    # only generic to the type checker, hence the TYPE_CHECKING guard.
+    SubParsers = argparse._SubParsersAction[argparse.ArgumentParser]  # pyright: ignore[reportPrivateUsage]
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -24,7 +31,7 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _configure_logging(verbose: bool = False) -> None:
+def configure_logging(verbose: bool = False) -> None:
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     logging.getLogger("kognic.auth").addHandler(handler)
@@ -34,7 +41,7 @@ def _configure_logging(verbose: bool = False) -> None:
 def main(args: list[str] | None = None) -> int:
     parser = create_parser()
     parsed = parser.parse_args(args)
-    _configure_logging(verbose=parsed.verbose)
+    configure_logging(verbose=parsed.verbose)
 
     for subcommand in _SUBCOMMANDS:
         if parsed.command == subcommand.COMMAND:

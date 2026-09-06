@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from kognic.auth import DEFAULT_CACHE_PATH
 from kognic.auth.internal.token_cache._base import TokenCache, is_valid, make_key
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 
 class FileTokenCache(TokenCache):

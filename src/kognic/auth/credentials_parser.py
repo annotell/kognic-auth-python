@@ -162,7 +162,7 @@ def resolve_credentials(
 
 
 if __name__ == "__main__":
-    creds = get_credentials_from_system()
+    creds: Optional[ApiCredentials] = get_credentials_from_system()
     if creds:
         # Avoid printing secrets; only indicate that credentials were loaded.
         print(f"Loaded credentials for client_id={creds.client_id!r}")

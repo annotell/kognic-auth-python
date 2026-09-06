@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from kognic.auth.internal.token_cache._base import SERVICE_NAME, TokenCache, is_valid, make_key
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 
 class KeyringTokenCache(TokenCache):

@@ -13,7 +13,7 @@ SUNSET_HEADER = "sunset-date"
 DATETIME_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 DATETIME_FMT_NO_MICRO = "%Y-%m-%dT%H:%M:%SZ"
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 SunsetHandler = Callable[[datetime, str, str], None]
 

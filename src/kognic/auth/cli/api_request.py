@@ -5,8 +5,8 @@ import json
 import sys
 from typing import Any
 
-from kognic.auth.cli import _configure_logging
-from kognic.auth.cli._output import _print_response
+from kognic.auth.cli import configure_logging
+from kognic.auth.cli._output import print_response
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config, resolve_environment
 from kognic.auth.internal.token_cache import make_cache
 from kognic.auth.requests.base_client import create_session, make_token_provider
@@ -108,7 +108,7 @@ def run(parsed: argparse.Namespace) -> int:
             headers=headers if headers else None,
         )
 
-        _print_response(response, output_format=parsed.output_format)
+        print_response(response, output_format=parsed.output_format)
         return 0 if response.ok else 1
 
     except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
@@ -122,5 +122,5 @@ def run(parsed: argparse.Namespace) -> int:
 def main(args: list[str] | None = None) -> None:
     parser = _create_parser()
     parsed = parser.parse_args(args)
-    _configure_logging(verbose=parsed.verbose)
+    configure_logging(verbose=parsed.verbose)
     sys.exit(run(parsed))
