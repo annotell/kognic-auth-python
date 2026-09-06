@@ -64,7 +64,7 @@ def handle_sunset(response: "Response", handler: Optional[SunsetHandler] = _defa
     if not sunset_date:
         return
 
-    handler(sunset_date, response.request.method, _parse_url(response.request.url))
+    handler(sunset_date, response.request.method or "", _parse_url(response.request.url))
 
 
 def _parse_date(date: str) -> Optional[datetime]:
@@ -77,8 +77,10 @@ def _parse_date(date: str) -> Optional[datetime]:
     return None
 
 
-def _parse_url(url: Union[str, "Url"]) -> str:
+def _parse_url(url: Union[str, "Url", None]) -> str:
     """Extract clean URL without query parameters."""
+    if url is None:
+        return ""
     if isinstance(url, str):
         return url.split("?")[0]
     return f"{url.scheme}://{url.host}{url.path}"

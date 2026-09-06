@@ -23,13 +23,13 @@ def _make_token(*, expires_in=3600, extra=None):
 
 def _cache_no_keyring() -> KeyringTokenCache:
     cache = KeyringTokenCache()
-    cache._keyring = lambda: None
+    cache.keyring = lambda: None
     return cache
 
 
 def _cache_with_keyring(mock_kr) -> KeyringTokenCache:
     cache = KeyringTokenCache()
-    cache._keyring = lambda: mock_kr
+    cache.keyring = lambda: mock_kr
     return cache
 
 
@@ -50,7 +50,7 @@ class KeyringAvailableTest(unittest.TestCase):
         mock_kr = mock.MagicMock()
         mock_kr.get_keyring.return_value = mock.MagicMock()
         with mock.patch.dict("sys.modules", {"keyring": mock_kr}):
-            result = cache._keyring()
+            result = cache.keyring()
         self.assertIsNotNone(result)
 
     def test_keyring_unavailable_when_fail_backend(self):
@@ -62,7 +62,7 @@ class KeyringAvailableTest(unittest.TestCase):
         mock_kr = mock.MagicMock()
         mock_kr.get_keyring.return_value = FailKeyring()
         with mock.patch.dict("sys.modules", {"keyring": mock_kr}):
-            result = cache._keyring()
+            result = cache.keyring()
         self.assertIsNone(result)
 
 

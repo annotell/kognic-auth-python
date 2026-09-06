@@ -2,27 +2,26 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+from types import ModuleType
+from typing import Any, Dict, Optional
 
 from kognic.auth.internal.token_cache._base import SERVICE_NAME, TokenCache, is_valid, make_key
 
 log = logging.getLogger(__name__)
-
-_KEYRING_MISSING = object()  # sentinel: import attempted but unavailable
 
 
 class KeyringTokenCache(TokenCache):
     """Token cache backed by the system keyring."""
 
     def __init__(self) -> None:
-        self._keyring_module = None  # not yet resolved
+        self._keyring_module: Optional[ModuleType] = None
+        self._keyring_resolved = False
 
-    def _keyring(self):
+    def keyring(self) -> Optional[ModuleType]:
         """Return the keyring module if usable, else None. Result is cached."""
-        if self._keyring_module is _KEYRING_MISSING:
-            return None
-        if self._keyring_module is not None:
+        if self._keyring_resolved:
             return self._keyring_module
+        self._keyring_resolved = True
         try:
             import keyring
 
@@ -31,12 +30,11 @@ class KeyringTokenCache(TokenCache):
                 raise RuntimeError("unusable keyring backend")
             self._keyring_module = keyring
         except Exception:
-            self._keyring_module = _KEYRING_MISSING
-            return None
+            self._keyring_module = None
         return self._keyring_module
 
-    def load(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> Optional[dict]:
-        kr = self._keyring()
+    def load(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        kr = self.keyring()
         if kr is None:
             return None
         try:
@@ -54,8 +52,8 @@ class KeyringTokenCache(TokenCache):
             log.debug("Failed to load token from keyring", exc_info=True)
             return None
 
-    def save(self, auth_server: str, client_id: str, token: dict, scopes: Optional[str] = None) -> None:
-        kr = self._keyring()
+    def save(self, auth_server: str, client_id: str, token: Dict[str, Any], scopes: Optional[str] = None) -> None:
+        kr = self.keyring()
         if kr is None:
             return
         try:
@@ -66,7 +64,7 @@ class KeyringTokenCache(TokenCache):
             log.debug("Failed to save token to keyring", exc_info=True)
 
     def clear(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> None:
-        kr = self._keyring()
+        kr = self.keyring()
         if kr is None:
             return
         try:

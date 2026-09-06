@@ -1,31 +1,48 @@
 """Protocol definitions for URL, Request, and Response types."""
 
-from typing import Dict, Protocol, Union, runtime_checkable
+from typing import Any, Mapping, Optional, Protocol, Union, runtime_checkable
 
 
 @runtime_checkable
 class Url(Protocol):
     """Protocol for URL objects (httpx URL)."""
 
-    scheme: str
-    host: str
-    path: str
+    @property
+    def scheme(self) -> str: ...
+
+    @property
+    def host(self) -> str: ...
+
+    @property
+    def path(self) -> str: ...
 
 
 @runtime_checkable
 class Request(Protocol):
     """Protocol for HTTP request objects."""
 
-    method: str
-    url: Union[str, Url]
+    @property
+    def method(self) -> Optional[str]: ...
+
+    @property
+    def url(self) -> Union[str, Url, None]: ...
 
 
 @runtime_checkable
 class Response(Protocol):
     """Protocol for HTTP response objects."""
 
-    headers: Dict[str, str]
-    request: Request
+    @property
+    def headers(self) -> Mapping[str, str]: ...
 
-    def json(self) -> dict:
-        raise NotImplementedError
+    @property
+    def request(self) -> Request: ...
+
+    def json(self) -> Any: ...
+
+
+class SupportsStatusCode(Protocol):
+    """Protocol for anything carrying an HTTP status code."""
+
+    @property
+    def status_code(self) -> int: ...

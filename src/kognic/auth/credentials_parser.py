@@ -3,12 +3,12 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union, cast
 
 from kognic.auth.credentials import ApiCredentials
 from kognic.auth.internal import credentials_store
 
-ANY_AUTH_TYPE = Union[str, os.PathLike, tuple, "ApiCredentials", dict, None]
+ANY_AUTH_TYPE = Union[str, "os.PathLike[str]", Tuple[str, str], "ApiCredentials", Dict[str, Any], None]
 
 REQUIRED_CREDENTIALS_FILE_KEYS = [
     "clientId",
@@ -47,18 +47,21 @@ def _check_expiry(creds: ApiCredentials) -> None:
         raise ValueError(f"Credentials expired at {creds.expires.isoformat()}")
 
 
-def parse_credentials(path: Union[str, os.PathLike, dict]) -> ApiCredentials:
+def parse_credentials(path: Union[str, "os.PathLike[str]", Dict[str, Any]]) -> ApiCredentials:
     if isinstance(path, dict):
         credentials = path
     else:
         absolute_path = Path(path).expanduser().resolve()
         try:
-            credentials = json.loads(absolute_path.read_text())
+            loaded: Any = json.loads(absolute_path.read_text())
         except FileNotFoundError:
             raise FileNotFoundError(f"Could not find API Credentials file at {path}") from None
 
-    if not isinstance(credentials, dict):
-        raise AttributeError(f"Could not json dict from {path}")
+        if not isinstance(loaded, dict):
+            raise AttributeError(f"Could not json dict from {path}")
+        # json.loads yields Any; isinstance narrows it to dict[Unknown, Unknown], so restate
+        # the key/value types the credentials file is documented to have.
+        credentials = cast(Dict[str, Any], loaded)
 
     for k in REQUIRED_CREDENTIALS_FILE_KEYS:
         if k not in credentials:
