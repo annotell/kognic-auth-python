@@ -35,6 +35,9 @@ source = "https://github.com/annotell/kognic-auth-python"
 kognic-auth = "kognic.auth.cli:main"
 kog = "kognic.auth.cli.api_request:main"
 
+[tool.setuptools.package-data]
+"kognic.auth" = ["py.typed"]
+
 [tool.setuptools_scm]
 version_file = "src/kognic/auth/_version.py"
 # kognic.auth imports __version__ from the generated file, so it has to reach
@@ -67,7 +70,18 @@ dev = [
     "pytest",
     "keyring>=23.0",
     "pytest-asyncio>=1.4.0",
+    "pyright>=1.1.400,<2",
 ]
+
+[tool.pyright]
+# pythonVersion is deliberately unset: pyright infers it from the interpreter, so the
+# build matrix typechecks against every supported version rather than a single pinned
+# one. Matters most for reportDeprecated, since typeshed gates @deprecated on the
+# target version (e.g. datetime.utcnow() is only deprecated from 3.12).
+include = ["src", "tests"]
+exclude = ["src/kognic/auth/_version.py"]
+strict = ["src", "tests"]
+reportDeprecated = "error"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -42,3 +42,7 @@ jobs:
         run: uv sync --all-extras
       - name: Test with pytest
         run: uv run pytest tests/
+      - name: Type check with pyright
+        run: uv run pyright
+      - name: Verify public API is fully typed
+        run: uv run pyright --verifytypes kognic.auth --ignoreexternal
