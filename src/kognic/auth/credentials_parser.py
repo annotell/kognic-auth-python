@@ -1,12 +1,18 @@
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union, cast
 
 from kognic.auth.credentials import ApiCredentials
 from kognic.auth.internal import credentials_store
+from kognic.auth.internal.credentials import anonymous_credentials, check_expiry
+from kognic.auth.internal.credentials import resolve_credentials as _resolve_credentials
+
+# Back-compat: these were importable under these private names before they moved.
+_check_expiry = check_expiry
+_anonymous_credentials = anonymous_credentials
 
 ANY_AUTH_TYPE = Union[str, "os.PathLike[str]", Tuple[str, str], "ApiCredentials", Dict[str, Any], None]
 
@@ -37,14 +43,6 @@ def _parse_optional_datetime(s: Optional[str]) -> Optional[datetime]:
         return _parse_datetime(s)
     except Exception:
         return None
-
-
-def _check_expiry(creds: ApiCredentials) -> None:
-    """Raise ValueError if the credentials have an expires field that is in the past."""
-    if creds.expires is None:
-        return
-    if datetime.now(timezone.utc) >= creds.expires:
-        raise ValueError(f"Credentials expired at {creds.expires.isoformat()}")
 
 
 def parse_credentials(path: Union[str, "os.PathLike[str]", Dict[str, Any]]) -> ApiCredentials:
@@ -91,17 +89,6 @@ def get_credentials_from_env() -> tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def _anonymous_credentials(client_id: str, client_secret: str) -> ApiCredentials:
-    return ApiCredentials(
-        client_id=client_id,
-        client_secret=client_secret,
-        email="",
-        user_id=0,
-        issuer="",
-        name="",
-    )
-
-
 def get_credentials_from_system() -> Optional[ApiCredentials]:
     creds = os.getenv("KOGNIC_CREDENTIALS")
     if creds:
@@ -130,7 +117,7 @@ def resolve_any_credentials(auth: ANY_AUTH_TYPE) -> ApiCredentials:
     if isinstance(auth, tuple):
         if len(auth) != 2:
             raise ValueError("Credentials tuple must be tuple of (client_id, client_secret)")
-        creds = _anonymous_credentials(*auth)
+        creds = anonymous_credentials(*auth)
     elif isinstance(auth, ApiCredentials):
         creds = auth
     elif isinstance(auth, dict):
@@ -154,25 +141,6 @@ def resolve_any_credentials(auth: ANY_AUTH_TYPE) -> ApiCredentials:
         raise ValueError(f"Unsupported auth type: {type(auth)}")
 
     return creds
-
-
-def _resolve_credentials(
-    auth: ANY_AUTH_TYPE = None, client_id: Optional[str] = None, client_secret: Optional[str] = None
-) -> Optional[ApiCredentials]:
-    """
-    Resolve credentials from either an auth input (which can be a variety of types)
-    or from explicit client_id and client_secret parameters.
-    Falls back to environment variables if neither are provided.
-    Returns the full ApiCredentials object, or None if no credentials are found.
-    """
-    if client_id is not None and client_secret is not None:
-        if auth is not None:
-            raise ValueError("Choose either auth or client_id+client_secret")
-        return _anonymous_credentials(client_id, client_secret)
-    elif auth is not None:
-        return resolve_any_credentials(auth)
-
-    return get_credentials_from_system()
 
 
 def resolve_credentials(

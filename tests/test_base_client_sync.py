@@ -218,7 +218,7 @@ class TestProviderPool(unittest.TestCase):
 
     @patch("kognic.auth.requests.base_client.requests.Session")
     @patch("kognic.auth.requests.base_client.RequestsAuthSession")
-    @patch("kognic.auth.requests.base_client._resolve_credentials", return_value=_creds("id1", "secret1"))
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=_creds("id1", "secret1"))
     def test_same_credentials_share_provider(self, _resolve, mock_ras, mock_session):
         self._make_clients(mock_session, n=2, auth=("id1", "secret1"))
 
@@ -228,7 +228,7 @@ class TestProviderPool(unittest.TestCase):
     @patch("kognic.auth.requests.base_client.requests.Session")
     @patch("kognic.auth.requests.base_client.RequestsAuthSession")
     @patch(
-        "kognic.auth.requests.base_client._resolve_credentials",
+        "kognic.auth.requests.base_client.resolve_credentials",
         side_effect=lambda auth, *a, **kw: _creds(*auth),
     )
     def test_different_credentials_get_different_providers(self, _resolve, mock_ras, mock_session):
@@ -243,7 +243,7 @@ class TestProviderPool(unittest.TestCase):
 
     @patch("kognic.auth.requests.base_client.requests.Session")
     @patch("kognic.auth.requests.base_client.RequestsAuthSession")
-    @patch("kognic.auth.requests.base_client._resolve_credentials", return_value=_creds("id1", "secret1"))
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=_creds("id1", "secret1"))
     def test_different_auth_host_gets_different_provider(self, _resolve, mock_ras, mock_session):
         from kognic.auth.requests.base_client import BaseApiClient
 
@@ -256,7 +256,7 @@ class TestProviderPool(unittest.TestCase):
 
     @patch("kognic.auth.requests.base_client.requests.Session")
     @patch("kognic.auth.requests.base_client.RequestsAuthSession")
-    @patch("kognic.auth.requests.base_client._resolve_credentials", return_value=_creds("id1", "secret1"))
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=_creds("id1", "secret1"))
     def test_cache_type_is_part_of_pool_key(self, _resolve, mock_ras, mock_session):
         from kognic.auth.internal.token_cache import FileTokenCache
         from kognic.auth.requests.base_client import BaseApiClient
@@ -270,7 +270,7 @@ class TestProviderPool(unittest.TestCase):
 
     @patch("kognic.auth.requests.base_client.requests.Session")
     @patch("kognic.auth.requests.base_client.RequestsAuthSession")
-    @patch("kognic.auth.requests.base_client._resolve_credentials", return_value=_creds("id1", "secret1"))
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=_creds("id1", "secret1"))
     def test_explicit_token_provider_bypasses_pool(self, mock_resolve, mock_ras, mock_session):
         from kognic.auth.requests.base_client import BaseApiClient, _provider_pool
 
@@ -284,7 +284,7 @@ class TestProviderPool(unittest.TestCase):
 
     @patch("kognic.auth.requests.base_client.requests.Session")
     @patch("kognic.auth.requests.base_client.RequestsAuthSession")
-    @patch("kognic.auth.requests.base_client._resolve_credentials", return_value=_creds("id1", "secret1"))
+    @patch("kognic.auth.requests.base_client.resolve_credentials", return_value=_creds("id1", "secret1"))
     def test_pool_entry_alive_while_client_referenced(self, _resolve, mock_ras, mock_session):
         from kognic.auth.requests.base_client import (
             DEFAULT_HOST,
@@ -313,7 +313,7 @@ class TestProviderPool(unittest.TestCase):
 
         # Use side_effect so each call returns a fresh object with no external strong references
         with patch(
-            "kognic.auth.requests.base_client._resolve_credentials",
+            "kognic.auth.requests.base_client.resolve_credentials",
             return_value=_creds("id-gc", "secret-gc"),
         ):
             with patch(

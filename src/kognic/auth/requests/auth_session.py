@@ -21,7 +21,8 @@ from kognic.auth import (
     RETRYABLE_METHODS,
 )
 from kognic.auth.base.auth_client import AuthClient
-from kognic.auth.credentials_parser import ANY_AUTH_TYPE, _check_expiry, _resolve_credentials
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE
+from kognic.auth.internal.credentials import check_expiry, resolve_credentials
 
 log = logging.getLogger(__name__)
 
@@ -107,9 +108,9 @@ class RequestsAuthSession(AuthClient):
         self.host = host
         self.token_url = f"{host}{token_endpoint}"
 
-        creds = _resolve_credentials(auth, client_id, client_secret)
+        creds = resolve_credentials(auth, client_id, client_secret)
         if creds:
-            _check_expiry(creds)
+            check_expiry(creds)
         client_id = creds.client_id if creds else None
         client_secret = creds.client_secret if creds else None
         self._client_id = client_id
