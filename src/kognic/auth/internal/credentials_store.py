@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 SERVICE_NAME = "kognic-credentials"
 DEFAULT_PROFILE = "default"
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 
 def _get_keyring():

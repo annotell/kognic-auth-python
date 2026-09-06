@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from typing import Any, Optional
 from unittest import mock
 
 from kognic.auth.credentials_parser import ApiCredentials
@@ -31,7 +32,11 @@ FULL_CREDS = ApiCredentials(
 )
 
 
-def _mock_keyring(get_password=None, set_password=None, delete_password=None):
+def _mock_keyring(
+    get_password: Optional[Any] = None,
+    set_password: Optional[Any] = None,
+    delete_password: Optional[Any] = None,
+) -> mock.MagicMock:
     """Return a mock keyring module wired to the given side effects / return values."""
     kr = mock.MagicMock()
     if get_password is not None:
@@ -45,21 +50,22 @@ def _mock_keyring(get_password=None, set_password=None, delete_password=None):
 
 
 class LoadCredentialsTest(unittest.TestCase):
-    def test_no_keyring_returns_none(self):
+    def test_no_keyring_returns_none(self) -> None:
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=None):
             self.assertIsNone(load_credentials())
 
-    def test_not_stored_returns_none(self):
+    def test_not_stored_returns_none(self) -> None:
         kr = _mock_keyring(get_password=None)
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):
             self.assertIsNone(load_credentials())
         kr.get_password.assert_called_once_with(SERVICE_NAME, DEFAULT_PROFILE)
 
-    def test_stored_credentials_returned(self):
+    def test_stored_credentials_returned(self) -> None:
         data = json.dumps(FULL_CREDS_DICT)
         kr = _mock_keyring(get_password=data)
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):
             result = load_credentials()
+        assert result is not None
         self.assertIsInstance(result, ApiCredentials)
         self.assertEqual(result.client_id, "my-id")
         self.assertEqual(result.client_secret, "my-secret")
@@ -67,19 +73,19 @@ class LoadCredentialsTest(unittest.TestCase):
         self.assertEqual(result.user_id, 1)
         self.assertEqual(result.issuer, "auth.kognic.test")
 
-    def test_custom_profile(self):
+    def test_custom_profile(self) -> None:
         data = json.dumps(FULL_CREDS_DICT)
         kr = _mock_keyring(get_password=data)
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):
             load_credentials(profile="demo")
         kr.get_password.assert_called_once_with(SERVICE_NAME, "demo")
 
-    def test_corrupt_json_returns_none(self):
+    def test_corrupt_json_returns_none(self) -> None:
         kr = _mock_keyring(get_password="not-json")
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):
             self.assertIsNone(load_credentials())
 
-    def test_keyring_error_returns_none(self):
+    def test_keyring_error_returns_none(self) -> None:
         kr = mock.MagicMock()
         kr.get_password.side_effect = Exception("keyring exploded")
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):
@@ -87,13 +93,13 @@ class LoadCredentialsTest(unittest.TestCase):
 
 
 class SaveCredentialsTest(unittest.TestCase):
-    def test_no_keyring_raises(self):
+    def test_no_keyring_raises(self) -> None:
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=None):
             with self.assertRaises(RuntimeError) as ctx:
                 save_credentials(FULL_CREDS)
             self.assertIn("keyring", str(ctx.exception).lower())
 
-    def test_stores_in_keyring(self):
+    def test_stores_in_keyring(self) -> None:
         kr = mock.MagicMock()
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):
             save_credentials(FULL_CREDS)
@@ -103,7 +109,7 @@ class SaveCredentialsTest(unittest.TestCase):
             json.dumps(FULL_CREDS_DICT),
         )
 
-    def test_custom_profile(self):
+    def test_custom_profile(self) -> None:
         kr = mock.MagicMock()
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):
             save_credentials(FULL_CREDS, profile="demo")
@@ -115,17 +121,17 @@ class SaveCredentialsTest(unittest.TestCase):
 
 
 class ClearCredentialsTest(unittest.TestCase):
-    def test_no_keyring_does_not_raise(self):
+    def test_no_keyring_does_not_raise(self) -> None:
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=None):
             clear_credentials()  # should not raise
 
-    def test_clears_from_keyring(self):
+    def test_clears_from_keyring(self) -> None:
         kr = mock.MagicMock()
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):
             clear_credentials()
         kr.delete_password.assert_called_once_with(SERVICE_NAME, DEFAULT_PROFILE)
 
-    def test_error_silenced(self):
+    def test_error_silenced(self) -> None:
         kr = mock.MagicMock()
         kr.delete_password.side_effect = Exception("gone already")
         with mock.patch("kognic.auth.internal.credentials_store._get_keyring", return_value=kr):

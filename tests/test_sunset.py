@@ -6,12 +6,13 @@ import httpx
 import pytest
 import requests
 
+from kognic.auth._protocols import Response
 from kognic.auth._sunset import DATETIME_FMT, handle_sunset
 
 SUNSET_HEADER = "sunset-date"
 
 
-def date_to_str(date: datetime):
+def date_to_str(date: datetime) -> str:
     return date.strftime(DATETIME_FMT)
 
 
@@ -29,7 +30,7 @@ def make_requests_response(sunset_date: Optional[str]) -> requests.Response:
     response = requests.Response()
     if sunset_date:
         response.headers[SUNSET_HEADER] = sunset_date
-    response.request = requests.Request("GET", url)
+    response.request = requests.Request("GET", url).prepare()
     return response
 
 
@@ -38,7 +39,9 @@ def make_httpx_response(sunset_date: Optional[str]) -> httpx.Response:
     return httpx.Response(status_code=200, headers=headers, request=httpx.Request("GET", url))
 
 
-def run_test_with_response(caplog, response, expected_log_level: Optional[str]):
+def run_test_with_response(
+    caplog: pytest.LogCaptureFixture, response: Response, expected_log_level: Optional[str]
+) -> None:
     handle_sunset(response)
     if expected_log_level:
         log_record = caplog.records[0]
@@ -48,68 +51,72 @@ def run_test_with_response(caplog, response, expected_log_level: Optional[str]):
 
 
 class TestSunsetDateRequests(TestCase):
+    _caplog: pytest.LogCaptureFixture
+
     @pytest.fixture(autouse=True)
-    def inject_fixtures(self, caplog):
+    def inject_fixtures(self, caplog: pytest.LogCaptureFixture) -> None:
         self._caplog = caplog
 
-    def test_when_sunset_date_not_set(self):
+    def test_when_sunset_date_not_set(self) -> None:
         response = make_requests_response(None)
         run_test_with_response(self._caplog, response, None)
 
-    def test_when_sunset_date_invalid(self):
+    def test_when_sunset_date_invalid(self) -> None:
         response = make_requests_response(SUNSET_DATE_WRONG_FORMAT)
         run_test_with_response(self._caplog, response, None)
 
-    def test_when_sunset_date_no_microseconds(self):
+    def test_when_sunset_date_no_microseconds(self) -> None:
         response = make_requests_response(SUNSET_DATE_NO_MICROSECONDS)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_long_time_ago(self):
+    def test_when_sunset_date_long_time_ago(self) -> None:
         response = make_requests_response(SUNSET_DATE_LONG_TIME_AGO)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_5_days_ago(self):
+    def test_when_sunset_date_5_days_ago(self) -> None:
         response = make_requests_response(SUNSET_DATE_5_DAYS_AGO)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_in_13_days(self):
+    def test_when_sunset_date_in_13_days(self) -> None:
         response = make_requests_response(SUNSET_DATE_IN_13_DAYS)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_in_15_days(self):
+    def test_when_sunset_date_in_15_days(self) -> None:
         response = make_requests_response(SUNSET_DATE_IN_15_DAYS)
         run_test_with_response(self._caplog, response, "WARNING")
 
 
 class TestSunsetDateHttpx(TestCase):
+    _caplog: pytest.LogCaptureFixture
+
     @pytest.fixture(autouse=True)
-    def inject_fixtures(self, caplog):
+    def inject_fixtures(self, caplog: pytest.LogCaptureFixture) -> None:
         self._caplog = caplog
 
-    def test_when_sunset_date_not_set(self):
+    def test_when_sunset_date_not_set(self) -> None:
         response = make_httpx_response(None)
         run_test_with_response(self._caplog, response, None)
 
-    def test_when_sunset_date_invalid(self):
+    def test_when_sunset_date_invalid(self) -> None:
         response = make_httpx_response(SUNSET_DATE_WRONG_FORMAT)
         run_test_with_response(self._caplog, response, None)
 
-    def test_when_sunset_date_no_microseconds(self):
+    def test_when_sunset_date_no_microseconds(self) -> None:
         response = make_httpx_response(SUNSET_DATE_NO_MICROSECONDS)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_long_time_ago(self):
+    def test_when_sunset_date_long_time_ago(self) -> None:
         response = make_httpx_response(SUNSET_DATE_LONG_TIME_AGO)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_5_days_ago(self):
+    def test_when_sunset_date_5_days_ago(self) -> None:
         response = make_httpx_response(SUNSET_DATE_5_DAYS_AGO)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_in_13_days(self):
+    def test_when_sunset_date_in_13_days(self) -> None:
         response = make_httpx_response(SUNSET_DATE_IN_13_DAYS)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_in_15_days(self):
+    def test_when_sunset_date_in_15_days(self) -> None:
         response = make_httpx_response(SUNSET_DATE_IN_15_DAYS)
         run_test_with_response(self._caplog, response, "WARNING")

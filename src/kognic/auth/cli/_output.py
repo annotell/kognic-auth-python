@@ -3,16 +3,18 @@ from __future__ import annotations
 import csv
 import io
 import json
-from typing import Any
+from typing import Any, cast
 
 
 def _extract_items(body: Any) -> list[Any] | None:
+    # isinstance() narrows Any to list[Unknown] / dict[Unknown, Unknown]; the contents
+    # are arbitrary decoded JSON, so restate that as Any.
     if isinstance(body, list):
-        return body
+        return cast("list[Any]", body)
     if isinstance(body, dict):
-        values = list(body.values())
+        values = list(cast("dict[str, Any]", body).values())
         if len(values) == 1 and isinstance(values[0], list):
-            return values[0]
+            return cast("list[Any]", values[0])
     return None
 
 
@@ -26,7 +28,7 @@ def _collect_fieldnames(items: list[Any]) -> list[str]:
     fieldnames: list[str] = []
     for item in items:
         if isinstance(item, dict):
-            for key in item:
+            for key in cast("dict[str, Any]", item):
                 if key not in fieldnames:
                     fieldnames.append(key)
     return fieldnames
@@ -41,7 +43,7 @@ def _print_delimited(items: list[Any], *, delimiter: str = ",") -> None:
     writer.writeheader()
     for item in items:
         if isinstance(item, dict):
-            writer.writerow({k: _stringify_value(v) for k, v in item.items()})
+            writer.writerow({str(k): _stringify_value(v) for k, v in cast("dict[str, Any]", item).items()})
         else:
             writer.writerow({"value": _stringify_value(item)})
     print(buf.getvalue(), end="")
@@ -55,7 +57,10 @@ def _print_table(items: list[Any]) -> None:
     rows: list[list[str]] = []
     for item in items:
         row = [
-            _stringify_value(item.get(f, "")) if isinstance(item, dict) else _stringify_value(item) for f in fieldnames
+            _stringify_value(cast("dict[str, Any]", item).get(f, ""))
+            if isinstance(item, dict)
+            else _stringify_value(item)
+            for f in fieldnames
         ]
         rows.append(row)
         for i, cell in enumerate(row):
@@ -68,7 +73,7 @@ def _print_table(items: list[Any]) -> None:
         print("| " + " | ".join(cell.ljust(col_widths[i]) for i, cell in enumerate(row)) + " |")
 
 
-def _print_response(response: Any, *, output_format: str = "json") -> None:
+def print_response(response: Any, *, output_format: str = "json") -> None:
     content_type = response.headers.get("Content-Type", "")
     if "application/json" in content_type:
         try:

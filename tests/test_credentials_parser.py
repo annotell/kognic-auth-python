@@ -1,3 +1,6 @@
+# get_credentials_from_env is deprecated and marked with @deprecated, but its behaviour
+# still needs covering until it is removed, so calling it here is intentional.
+# pyright: reportDeprecated=false
 """Unit tests for credentials_parser module."""
 
 import json
@@ -5,11 +8,13 @@ import os
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+from unittest import mock
 from unittest.mock import patch
 
 from kognic.auth.credentials_parser import (
     ApiCredentials,
-    _check_expiry,
+    _check_expiry,  # pyright: ignore[reportPrivateUsage]  # deliberately the back-compat alias
     get_credentials_from_env,
     parse_credentials,
     resolve_credentials,
@@ -25,7 +30,7 @@ VALID_CREDENTIALS_DICT = {
 
 
 class TestParseCredentials(unittest.TestCase):
-    def test_parse_from_dict(self):
+    def test_parse_from_dict(self) -> None:
         creds = parse_credentials(VALID_CREDENTIALS_DICT)
         self.assertEqual(creds.client_id, "test_id")
         self.assertEqual(creds.client_secret, "test_secret")
@@ -33,7 +38,7 @@ class TestParseCredentials(unittest.TestCase):
         self.assertEqual(creds.user_id, 1)
         self.assertEqual(creds.issuer, "auth.kognic.test")
 
-    def test_parse_from_file(self, tmp_path=None):
+    def test_parse_from_file(self) -> None:
         import tempfile
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -48,17 +53,17 @@ class TestParseCredentials(unittest.TestCase):
         finally:
             Path(path).unlink()
 
-    def test_parse_file_not_found(self):
+    def test_parse_file_not_found(self) -> None:
         with self.assertRaises(FileNotFoundError):
             parse_credentials("/nonexistent/path/creds.json")
 
-    def test_parse_missing_key_raises(self):
+    def test_parse_missing_key_raises(self) -> None:
         incomplete = {"clientId": "test_id", "clientSecret": "test_secret"}
         with self.assertRaises(KeyError) as ctx:
             parse_credentials(incomplete)
         self.assertIn("email", str(ctx.exception))
 
-    def test_parse_stores_created_and_expires(self):
+    def test_parse_stores_created_and_expires(self) -> None:
         data = {
             **VALID_CREDENTIALS_DICT,
             "created": "2026-01-01T00:00:00.000000Z",
@@ -68,13 +73,13 @@ class TestParseCredentials(unittest.TestCase):
         self.assertEqual(creds.created, datetime(2026, 1, 1, tzinfo=timezone.utc))
         self.assertEqual(creds.expires, datetime(2099, 1, 1, tzinfo=timezone.utc))
 
-    def test_parse_does_not_check_expiry(self):
+    def test_parse_does_not_check_expiry(self) -> None:
         """parse_credentials should not raise even if expires is in the past."""
         data = {**VALID_CREDENTIALS_DICT, "expires": "2000-01-01T00:00:00.000000Z"}
         creds = parse_credentials(data)
         self.assertEqual(creds.expires, datetime(2000, 1, 1, tzinfo=timezone.utc))
 
-    def test_parse_malformed_expires_returns_none(self):
+    def test_parse_malformed_expires_returns_none(self) -> None:
         data = {**VALID_CREDENTIALS_DICT, "expires": "not-a-date"}
         creds = parse_credentials(data)
         self.assertIsNone(creds.expires)
@@ -83,7 +88,7 @@ class TestParseCredentials(unittest.TestCase):
 class TestGetCredentialsFromEnv(unittest.TestCase):
     @patch.dict(os.environ, {}, clear=True)
     @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
-    def test_no_env_vars_returns_none(self, _):
+    def test_no_env_vars_returns_none(self, _) -> None:
         client_id, client_secret = get_credentials_from_env()
         self.assertIsNone(client_id)
         self.assertIsNone(client_secret)
@@ -95,26 +100,26 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
             client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i", name="name"
         ),
     )
-    def test_falls_back_to_keyring(self, _):
+    def test_falls_back_to_keyring(self, _) -> None:
         client_id, client_secret = get_credentials_from_env()
         self.assertEqual(client_id, "kr_id")
         self.assertEqual(client_secret, "kr_secret")
 
     @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id", "KOGNIC_CLIENT_SECRET": "env_secret"}, clear=True)
     @patch("kognic.auth.credentials_parser.credentials_store.load_credentials")
-    def test_env_vars_take_precedence_over_keyring(self, mock_load):
+    def test_env_vars_take_precedence_over_keyring(self, mock_load: mock.MagicMock) -> None:
         client_id, client_secret = get_credentials_from_env()
         self.assertEqual(client_id, "env_id")
         self.assertEqual(client_secret, "env_secret")
         mock_load.assert_not_called()
 
     @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id", "KOGNIC_CLIENT_SECRET": "env_secret"}, clear=True)
-    def test_client_id_and_secret_env_vars(self):
+    def test_client_id_and_secret_env_vars(self) -> None:
         client_id, client_secret = get_credentials_from_env()
         self.assertEqual(client_id, "env_id")
         self.assertEqual(client_secret, "env_secret")
 
-    def test_kognic_credentials_file(self):
+    def test_kognic_credentials_file(self) -> None:
         import tempfile
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -134,33 +139,34 @@ class TestGetCredentialsFromEnv(unittest.TestCase):
         {"KOGNIC_CREDENTIALS": "/nonexistent.json", "KOGNIC_CLIENT_ID": "fallback_id"},
         clear=True,
     )
-    def test_kognic_credentials_takes_precedence_over_client_id(self):
+    def test_kognic_credentials_takes_precedence_over_client_id(self) -> None:
         with self.assertRaises(FileNotFoundError):
             get_credentials_from_env()
 
 
 class TestResolveCredentials(unittest.TestCase):
-    def test_auth_tuple(self):
+    def test_auth_tuple(self) -> None:
         client_id, client_secret = resolve_credentials(auth=("tuple_id", "tuple_secret"))
         self.assertEqual(client_id, "tuple_id")
         self.assertEqual(client_secret, "tuple_secret")
 
-    def test_auth_tuple_wrong_length_raises(self):
+    def test_auth_tuple_wrong_length_raises(self) -> None:
         with self.assertRaises(ValueError) as ctx:
-            resolve_credentials(auth=("only_one",))
+            # deliberately the wrong shape: ANY_AUTH_TYPE is a 2-tuple
+            resolve_credentials(auth=("only_one",))  # pyright: ignore[reportArgumentType]
         self.assertIn("tuple", str(ctx.exception))
 
-    def test_explicit_client_id_and_secret(self):
+    def test_explicit_client_id_and_secret(self) -> None:
         client_id, client_secret = resolve_credentials(client_id="explicit_id", client_secret="explicit_secret")
         self.assertEqual(client_id, "explicit_id")
         self.assertEqual(client_secret, "explicit_secret")
 
-    def test_auth_and_client_id_raises(self):
+    def test_auth_and_client_id_raises(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             resolve_credentials(auth=("id", "secret"), client_id="other_id", client_secret="other_secret")
         self.assertIn("Choose either", str(ctx.exception))
 
-    def test_auth_file_path(self):
+    def test_auth_file_path(self) -> None:
         import tempfile
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -175,24 +181,24 @@ class TestResolveCredentials(unittest.TestCase):
             Path(path).unlink()
 
     @patch.dict(os.environ, {"KOGNIC_CLIENT_ID": "env_id", "KOGNIC_CLIENT_SECRET": "env_secret"}, clear=True)
-    def test_falls_back_to_env(self):
+    def test_falls_back_to_env(self) -> None:
         client_id, client_secret = resolve_credentials()
         self.assertEqual(client_id, "env_id")
         self.assertEqual(client_secret, "env_secret")
 
     @patch.dict(os.environ, {}, clear=True)
     @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
-    def test_no_credentials_returns_none(self, _):
+    def test_no_credentials_returns_none(self, _) -> None:
         client_id, client_secret = resolve_credentials()
         self.assertIsNone(client_id)
         self.assertIsNone(client_secret)
 
-    def test_auth_non_json_path_raises(self):
+    def test_auth_non_json_path_raises(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             resolve_credentials(auth="/some/path/creds.yaml")
         self.assertIn("must be json", str(ctx.exception))
 
-    def test_auth_api_credentials(self):
+    def test_auth_api_credentials(self) -> None:
         creds = ApiCredentials(
             client_id="id",
             client_secret="secret",
@@ -205,11 +211,12 @@ class TestResolveCredentials(unittest.TestCase):
         self.assertEqual(client_id, "id")
         self.assertEqual(client_secret, "secret")
 
-    def test_auth_unsupported_type_raises(self):
+    def test_auth_unsupported_type_raises(self) -> None:
         with self.assertRaises(ValueError):
-            resolve_credentials(auth=12345)
+            # deliberately an unsupported type
+            resolve_credentials(auth=12345)  # pyright: ignore[reportArgumentType]
 
-    def test_auth_dict(self):
+    def test_auth_dict(self) -> None:
         client_id, client_secret = resolve_credentials(auth=VALID_CREDENTIALS_DICT)
         self.assertEqual(client_id, "test_id")
         self.assertEqual(client_secret, "test_secret")
@@ -220,20 +227,20 @@ class TestResolveCredentials(unittest.TestCase):
             client_id="kr_id", client_secret="kr_secret", email="a@b.com", user_id=1, issuer="i", name="name"
         ),
     )
-    def test_auth_keyring_uri(self, mock_load):
+    def test_auth_keyring_uri(self, mock_load: mock.MagicMock) -> None:
         client_id, client_secret = resolve_credentials(auth="keyring://myprofile")
         self.assertEqual(client_id, "kr_id")
         self.assertEqual(client_secret, "kr_secret")
         mock_load.assert_called_once_with("myprofile")
 
     @patch("kognic.auth.credentials_parser.credentials_store.load_credentials", return_value=None)
-    def test_auth_keyring_uri_not_found_raises(self, _):
+    def test_auth_keyring_uri_not_found_raises(self, _) -> None:
         with self.assertRaises(ValueError) as ctx:
             resolve_credentials(auth="keyring://missing-profile")
         self.assertIn("missing-profile", str(ctx.exception))
 
 
-def _make_creds(**kwargs) -> ApiCredentials:
+def _make_creds(**kwargs: Any) -> ApiCredentials:
     return ApiCredentials(
         client_id="id",
         client_secret="secret",
@@ -245,18 +252,18 @@ def _make_creds(**kwargs) -> ApiCredentials:
 
 
 class TestCheckExpiry(unittest.TestCase):
-    def test_no_expires_field(self):
+    def test_no_expires_field(self) -> None:
         _check_expiry(_make_creds())  # should not raise
 
-    def test_future_expires(self):
+    def test_future_expires(self) -> None:
         _check_expiry(_make_creds(expires=datetime(2099, 1, 1, tzinfo=timezone.utc)))  # should not raise
 
-    def test_expired_raises(self):
+    def test_expired_raises(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             _check_expiry(_make_creds(expires=datetime(2000, 1, 1, tzinfo=timezone.utc)))
         self.assertIn("expired", str(ctx.exception))
 
-    def test_expired_with_time(self):
+    def test_expired_with_time(self) -> None:
         with self.assertRaises(ValueError):
             _check_expiry(_make_creds(expires=datetime(2000, 6, 15, 12, 34, 56, 123456, tzinfo=timezone.utc)))
 

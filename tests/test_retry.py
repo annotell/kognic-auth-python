@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import httpx
 import pytest
@@ -32,17 +32,21 @@ _NEVER_EXPIRES = 32503680000
 
 
 @pytest.fixture(autouse=True)
-def _no_sleeping(monkeypatch):
+def no_sleeping(monkeypatch: pytest.MonkeyPatch) -> None:
     """Remove real backoff delays so the suite stays fast.
 
     Only the number of attempts is under test, never the delay between them.
     """
 
-    async def _async_noop(_seconds):
+    async def _async_noop(_seconds: float) -> None:
         return None
 
     monkeypatch.setattr(asyncio, "sleep", _async_noop)
-    monkeypatch.setattr(urllib3.util.retry.Retry, "sleep", lambda self, response=None: None)
+
+    def _no_retry_sleep(self: urllib3.util.retry.Retry, response: Optional[Any] = None) -> None:
+        return None
+
+    monkeypatch.setattr(urllib3.util.retry.Retry, "sleep", _no_retry_sleep)
 
 
 class _StatusSequence:
@@ -67,7 +71,7 @@ def _async_client(sequence: _StatusSequence) -> BaseAsyncApiClient:
         return httpx.Response(sequence.next_status(), json={"message": "transient"})
 
     client = BaseAsyncApiClient(auth=("client-id", "client-secret"), transport=httpx.MockTransport(handler))
-    client._oauth_client.token = {
+    client._oauth_client.token = {  # pyright: ignore[reportPrivateUsage]
         "access_token": "access-token",
         "token_type": "Bearer",
         "expires_at": _NEVER_EXPIRES,
@@ -112,14 +116,14 @@ class _CountingHandler(BaseHTTPRequestHandler):
     do_PUT = _respond
     do_PATCH = _respond
 
-    def log_message(self, format, *args):  # noqa: A002
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         """Silence per-request stderr logging so test output stays pristine."""
 
 
 class _StubTokenProvider:
     """Minimal stand-in for RequestsAuthSession; the tests never exercise token refresh."""
 
-    def ensure_token(self) -> dict:
+    def ensure_token(self) -> Dict[str, Any]:
         return {"access_token": "access-token"}
 
     def invalidate_token(self) -> None:
@@ -129,12 +133,14 @@ class _StubTokenProvider:
 def _sync_attempts(method: str, statuses: List[int]) -> tuple[int, Optional[int]]:
     """Issue one request against a local server and report how many attempts it received."""
     sequence = _StatusSequence(statuses)
-    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    handler: Callable[..., Any] = type("_Handler", (_CountingHandler,), {"sequence": sequence})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        session = create_session(token_provider=_StubTokenProvider())
+        # _StubTokenProvider stands in for RequestsAuthSession; these tests never
+        # exercise anything beyond ensure_token/invalidate_token.
+        session = create_session(token_provider=cast(RequestsAuthSession, _StubTokenProvider()))
         url = f"http://127.0.0.1:{server.server_port}/resource"
         try:
             resp = session.request(method, url)
@@ -152,55 +158,55 @@ RECOVERS_ON_LAST_ATTEMPT = [503, 503, 503, 200]
 
 
 class TestAsyncRetry:
-    async def test_post_is_not_retried(self):
+    async def test_post_is_not_retried(self) -> None:
         attempts, status = await _async_attempts("POST", ALWAYS_503)
         assert attempts == 1
         assert status is None
 
-    async def test_lowercase_post_is_not_retried(self):
+    async def test_lowercase_post_is_not_retried(self) -> None:
         attempts, _ = await _async_attempts("post", ALWAYS_503)
         assert attempts == 1
 
-    async def test_patch_is_not_retried(self):
+    async def test_patch_is_not_retried(self) -> None:
         attempts, _ = await _async_attempts("PATCH", ALWAYS_503)
         assert attempts == 1
 
-    async def test_get_is_retried_until_attempts_are_exhausted(self):
+    async def test_get_is_retried_until_attempts_are_exhausted(self) -> None:
         attempts, status = await _async_attempts("GET", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
         assert status is None
 
-    async def test_get_returns_the_first_success(self):
+    async def test_get_returns_the_first_success(self) -> None:
         attempts, status = await _async_attempts("GET", RECOVERS_ON_LAST_ATTEMPT)
         assert attempts == TOTAL_ATTEMPTS
         assert status == 200
 
-    async def test_put_is_retried(self):
+    async def test_put_is_retried(self) -> None:
         attempts, _ = await _async_attempts("PUT", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
 
 
 class TestSyncRetry:
-    def test_post_is_not_retried(self):
+    def test_post_is_not_retried(self) -> None:
         attempts, status = _sync_attempts("POST", ALWAYS_503)
         assert attempts == 1
         assert status is None
 
-    def test_patch_is_not_retried(self):
+    def test_patch_is_not_retried(self) -> None:
         attempts, _ = _sync_attempts("PATCH", ALWAYS_503)
         assert attempts == 1
 
-    def test_get_is_retried_until_attempts_are_exhausted(self):
+    def test_get_is_retried_until_attempts_are_exhausted(self) -> None:
         attempts, status = _sync_attempts("GET", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
         assert status is None
 
-    def test_get_returns_the_first_success(self):
+    def test_get_returns_the_first_success(self) -> None:
         attempts, status = _sync_attempts("GET", RECOVERS_ON_LAST_ATTEMPT)
         assert attempts == TOTAL_ATTEMPTS
         assert status == 200
 
-    def test_put_is_retried(self):
+    def test_put_is_retried(self) -> None:
         attempts, _ = _sync_attempts("PUT", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
 
@@ -234,7 +240,7 @@ def _sync_token_fetch(statuses: List[int]) -> tuple[int, Optional[requests.Reque
     ever reached. Returns ``(attempts, error)`` where error is what reached the caller.
     """
     sequence = _StatusSequence(statuses)
-    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    handler: Callable[..., Any] = type("_Handler", (_CountingHandler,), {"sequence": sequence})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -255,7 +261,7 @@ def _sync_token_fetch(statuses: List[int]) -> tuple[int, Optional[requests.Reque
 def _auth_session_caller_attempts(method: str, statuses: List[int]) -> int:
     """Count the attempts a caller's own request makes through ``RequestsAuthSession.session``."""
     sequence = _StatusSequence(statuses)
-    handler: Callable = type("_Handler", (_CountingHandler,), {"sequence": sequence})
+    handler: Callable[..., Any] = type("_Handler", (_CountingHandler,), {"sequence": sequence})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -288,20 +294,20 @@ class TestTokenFetchRetry:
     down every caller holding a client.
     """
 
-    async def test_async_token_fetch_is_retried(self):
+    async def test_async_token_fetch_is_retried(self) -> None:
         attempts, _ = await _async_token_fetch_attempts(ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
 
-    async def test_async_token_fetch_recovers(self):
+    async def test_async_token_fetch_recovers(self) -> None:
         attempts, succeeded = await _async_token_fetch_attempts(RECOVERS_ON_LAST_ATTEMPT)
         assert attempts == TOTAL_ATTEMPTS
         assert succeeded
 
-    def test_sync_token_fetch_is_retried(self):
+    def test_sync_token_fetch_is_retried(self) -> None:
         attempts, _ = _sync_token_fetch(ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
 
-    def test_sync_token_fetch_surfaces_the_auth_server_response(self):
+    def test_sync_token_fetch_surfaces_the_auth_server_response(self) -> None:
         # An exhausted retry must hand back the auth server's own failure, not a urllib3
         # RetryError, so the caller can read why authentication failed.
         _, error = _sync_token_fetch(ALWAYS_503)
@@ -310,7 +316,7 @@ class TestTokenFetchRetry:
         assert error.response.status_code == 503
         assert "transient" in error.response.text
 
-    def test_caller_post_through_the_auth_session_is_not_retried(self):
+    def test_caller_post_through_the_auth_session_is_not_retried(self) -> None:
         # The token retry is mounted on the token URL, so a caller's own POST through the same
         # session keeps the default policy and is never replayed.
         assert _auth_session_caller_attempts("POST", ALWAYS_503) == 1
@@ -318,10 +324,10 @@ class TestTokenFetchRetry:
 
 class TestSharedPolicy:
     def test_sync_retry_policy_uses_the_shared_method_set(self):
-        # Identity, not equality: urllib3's own default happens to hold the same methods, so
+        # Identity, not equality -> None: urllib3's own default happens to hold the same methods, so
         # only an identity check proves the sync client is driven by the shared constant.
         assert DEFAULT_RETRY.allowed_methods is RETRYABLE_METHODS
 
-    def test_non_idempotent_methods_are_excluded(self):
+    def test_non_idempotent_methods_are_excluded(self) -> None:
         assert "POST" not in RETRYABLE_METHODS
         assert "PATCH" not in RETRYABLE_METHODS

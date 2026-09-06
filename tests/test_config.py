@@ -2,18 +2,19 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, Dict
 
 from kognic.auth import DEFAULT_HOST
 from kognic.auth.env_config import Environment, KognicEnvConfig, load_kognic_env_config, resolve_environment
 
 
 class LoadConfigTest(unittest.TestCase):
-    def test_missing_file_returns_empty_config(self):
+    def test_missing_file_returns_empty_config(self) -> None:
         config = load_kognic_env_config("/nonexistent/path/config.json")
         self.assertEqual(config.environments, {})
         self.assertIsNone(config.default_environment)
 
-    def test_valid_config(self):
+    def test_valid_config(self) -> None:
         data = {
             "environments": {
                 "production": {
@@ -42,6 +43,7 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(prod.name, "production")
         self.assertEqual(prod.host, "app.kognic.com")
         self.assertEqual(prod.auth_server, "https://auth.app.kognic.com")
+        assert prod.credentials is not None
         self.assertTrue(prod.credentials.endswith("creds.json"))
         self.assertNotIn("~", prod.credentials)
 
@@ -49,7 +51,7 @@ class LoadConfigTest(unittest.TestCase):
         self.assertIsNone(demo.credentials)
         self.assertEqual(demo.scopes, [])
 
-    def test_scopes_loaded_from_environment(self):
+    def test_scopes_loaded_from_environment(self) -> None:
         data = {
             "environments": {
                 "scoped": {
@@ -72,7 +74,7 @@ class LoadConfigTest(unittest.TestCase):
         self.assertEqual(config.environments["scoped"].scopes, ["api:read", "api:write"])
         self.assertEqual(config.environments["unscoped"].scopes, [])
 
-    def test_invalid_json_raises(self):
+    def test_invalid_json_raises(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             f.write("not valid json{")
             f.flush()
@@ -80,7 +82,7 @@ class LoadConfigTest(unittest.TestCase):
                 load_kognic_env_config(f.name)
         Path(f.name).unlink()
 
-    def test_keyring_uri_not_expanded(self):
+    def test_keyring_uri_not_expanded(self) -> None:
         """keyring:// credentials are stored as-is, not treated as file paths."""
         data = {
             "environments": {
@@ -99,8 +101,8 @@ class LoadConfigTest(unittest.TestCase):
 
         self.assertEqual(config.environments["production"].credentials, "keyring://production")
 
-    def test_empty_contexts(self):
-        data = {"environments": {}}
+    def test_empty_contexts(self) -> None:
+        data: Dict[str, Any] = {"environments": {}}
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(data, f)
             f.flush()
@@ -131,43 +133,43 @@ class ResolveEnvironmentTest(unittest.TestCase):
             default_environment="production",
         )
 
-    def test_explicit_env(self):
+    def test_explicit_env(self) -> None:
         env = resolve_environment(self.config, "https://anything.com/v1/foo", "demo")
         self.assertEqual(env.name, "demo")
 
-    def test_explicit_env_unknown_raises(self):
+    def test_explicit_env_unknown_raises(self) -> None:
         with self.assertRaises(ValueError) as cm:
             resolve_environment(self.config, "https://anything.com", "nonexistent")
         self.assertIn("Unknown environment", str(cm.exception))
 
-    def test_exact_host_match(self):
+    def test_exact_host_match(self) -> None:
         env = resolve_environment(self.config, "https://app.kognic.com/v1/projects")
         self.assertEqual(env.name, "production")
 
-    def test_subdomain_match(self):
+    def test_subdomain_match(self) -> None:
         env = resolve_environment(self.config, "https://api.app.kognic.com/v1/projects")
         self.assertEqual(env.name, "production")
 
-    def test_demo_exact_match(self):
+    def test_demo_exact_match(self) -> None:
         env = resolve_environment(self.config, "https://demo.kognic.com/v1/projects")
         self.assertEqual(env.name, "demo")
 
-    def test_demo_subdomain_match(self):
+    def test_demo_subdomain_match(self) -> None:
         env = resolve_environment(self.config, "https://api.demo.kognic.com/v1/projects")
         self.assertEqual(env.name, "demo")
 
-    def test_default_environment_fallback(self):
+    def test_default_environment_fallback(self) -> None:
         env = resolve_environment(self.config, "https://unknown.example.com/v1/foo")
         self.assertEqual(env.name, "production")
 
-    def test_no_config_fallback(self):
+    def test_no_config_fallback(self) -> None:
         empty_config = KognicEnvConfig()
         env = resolve_environment(empty_config, "https://app.kognic.com/v1/projects")
         self.assertEqual(env.name, "default")
         self.assertEqual(env.auth_server, DEFAULT_HOST)
         self.assertIsNone(env.credentials)
 
-    def test_no_default_no_match_falls_back_to_default_auth(self):
+    def test_no_default_no_match_falls_back_to_default_auth(self) -> None:
         config = KognicEnvConfig(
             environments={
                 "demo": Environment(

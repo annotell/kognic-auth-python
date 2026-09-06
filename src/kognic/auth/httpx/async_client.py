@@ -1,6 +1,6 @@
 import logging
 from asyncio import Lock
-from typing import List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
@@ -8,15 +8,26 @@ from authlib.oauth2.rfc6749 import OAuth2Token
 
 from kognic.auth import DEFAULT_HOST, DEFAULT_TOKEN_ENDPOINT_RELPATH
 from kognic.auth.base.auth_client import AuthClient
-from kognic.auth.credentials_parser import _check_expiry, _resolve_credentials
+from kognic.auth.credentials_parser import ANY_AUTH_TYPE
+from kognic.auth.internal.credentials import check_expiry, resolve_credentials
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 
 class _AsyncFixedClient(AsyncOAuth2Client):
-    async def _refresh_token(self, url, **kwargs):
+    async def _refresh_token(
+        self,
+        url: str,
+        refresh_token: Optional[str] = None,
+        body: str = "",
+        headers: Optional[Mapping[str, str]] = None,
+        auth: Any = httpx.USE_CLIENT_DEFAULT,
+        **kwargs: Any,
+    ) -> OAuth2Token:
         try:
-            return await super(_AsyncFixedClient, self)._refresh_token(url, **kwargs)
+            return await super(_AsyncFixedClient, self)._refresh_token(
+                url, refresh_token=refresh_token, body=body, headers=headers, auth=auth, **kwargs
+            )
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 log.info("Refresh token expired, resetting auth session")
@@ -28,12 +39,12 @@ class HttpxAuthAsyncClient(AuthClient):
     def __init__(
         self,
         *,
-        auth=None,
+        auth: ANY_AUTH_TYPE = None,
         host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
         scopes: Optional[List[str]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize the async auth client.
 
         Args:
@@ -43,12 +54,12 @@ class HttpxAuthAsyncClient(AuthClient):
             scopes: OAuth2 scopes to request, e.g. ["api:read", "api:write"].
             **kwargs: Additional params to pass into Httpx Client Constructor
         """
-        self.host = host
-        self.token_url = f"{host}{token_endpoint}"
+        self.host: str = host
+        self.token_url: str = f"{host}{token_endpoint}"
 
-        creds = _resolve_credentials(auth)
+        creds = resolve_credentials(auth)
         if creds:
-            _check_expiry(creds)
+            check_expiry(creds)
 
         client_id = creds.client_id if creds else None
         client_secret = creds.client_secret if creds else None
@@ -56,7 +67,7 @@ class HttpxAuthAsyncClient(AuthClient):
         if scopes is None and creds and creds.scopes:
             scopes = creds.scopes
 
-        self._oauth_client = _AsyncFixedClient(
+        self._oauth_client: _AsyncFixedClient = _AsyncFixedClient(
             client_id=client_id,
             client_secret=client_secret,
             update_token=self._update_token,
@@ -71,10 +82,15 @@ class HttpxAuthAsyncClient(AuthClient):
         self._lock = Lock()
 
     @property
-    def token(self):
+    def token(self) -> Optional[Dict[str, Any]]:
         return self._oauth_client.token
 
-    async def _update_token(self, token: OAuth2Token, access_token=None, refresh_token=None):
+    async def _update_token(
+        self,
+        token: Mapping[str, Any],
+        access_token: Optional[str] = None,
+        refresh_token: Optional[str] = None,
+    ) -> None:
         self._log_new_token()
 
     @property
@@ -87,5 +103,5 @@ class HttpxAuthAsyncClient(AuthClient):
                     await self._update_token(token)
         return self._oauth_client
 
-    async def close(self):
+    async def close(self) -> None:
         await self._oauth_client.aclose()

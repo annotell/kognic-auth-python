@@ -1,13 +1,14 @@
 import json
 import time
 import unittest
+from typing import Any, Dict, Optional
 from unittest import mock
 
 from kognic.auth.internal.token_cache import KeyringTokenCache
 from kognic.auth.internal.token_cache._base import EXPIRY_MARGIN_SECONDS, SERVICE_NAME, make_key
 
 
-def _make_token(*, expires_in=3600, extra=None):
+def _make_token(*, expires_in: int = 3600, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Create a realistic token dict."""
     now = time.time()
     token = {
@@ -23,37 +24,37 @@ def _make_token(*, expires_in=3600, extra=None):
 
 def _cache_no_keyring() -> KeyringTokenCache:
     cache = KeyringTokenCache()
-    cache._keyring = lambda: None
+    cache.keyring = lambda: None
     return cache
 
 
-def _cache_with_keyring(mock_kr) -> KeyringTokenCache:
+def _cache_with_keyring(mock_kr: mock.MagicMock) -> KeyringTokenCache:
     cache = KeyringTokenCache()
-    cache._keyring = lambda: mock_kr
+    cache.keyring = lambda: mock_kr
     return cache
 
 
 class MakeKeyTest(unittest.TestCase):
-    def test_format(self):
+    def test_format(self) -> None:
         key = make_key("https://auth.app.kognic.com", "my-client-id")
         self.assertEqual(key, "https://auth.app.kognic.com:my-client-id")
 
-    def test_different_servers_produce_different_keys(self):
+    def test_different_servers_produce_different_keys(self) -> None:
         key1 = make_key("https://auth.app.kognic.com", "client-1")
         key2 = make_key("https://auth.demo.kognic.com", "client-1")
         self.assertNotEqual(key1, key2)
 
 
 class KeyringAvailableTest(unittest.TestCase):
-    def test_keyring_available_when_valid_backend(self):
+    def test_keyring_available_when_valid_backend(self) -> None:
         cache = KeyringTokenCache()
         mock_kr = mock.MagicMock()
         mock_kr.get_keyring.return_value = mock.MagicMock()
         with mock.patch.dict("sys.modules", {"keyring": mock_kr}):
-            result = cache._keyring()
+            result = cache.keyring()
         self.assertIsNotNone(result)
 
-    def test_keyring_unavailable_when_fail_backend(self):
+    def test_keyring_unavailable_when_fail_backend(self) -> None:
         cache = KeyringTokenCache()
 
         class FailKeyring:
@@ -62,78 +63,78 @@ class KeyringAvailableTest(unittest.TestCase):
         mock_kr = mock.MagicMock()
         mock_kr.get_keyring.return_value = FailKeyring()
         with mock.patch.dict("sys.modules", {"keyring": mock_kr}):
-            result = cache._keyring()
+            result = cache.keyring()
         self.assertIsNone(result)
 
 
 class LoadCachedTokenTest(unittest.TestCase):
-    def test_keyring_not_available(self):
+    def test_keyring_not_available(self) -> None:
         result = _cache_no_keyring().load("https://auth.app.kognic.com", "client-1")
         self.assertIsNone(result)
 
-    def test_not_found(self):
+    def test_not_found(self) -> None:
         mock_kr = mock.MagicMock()
         mock_kr.get_password.return_value = None
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
         self.assertIsNone(result)
         mock_kr.get_password.assert_called_once_with(SERVICE_NAME, "https://auth.app.kognic.com:client-1")
 
-    def test_valid_token(self):
+    def test_valid_token(self) -> None:
         token = _make_token(expires_in=3600)
         mock_kr = mock.MagicMock()
         mock_kr.get_password.return_value = json.dumps(token)
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result["access_token"], "eyJ.test.token")
 
-    def test_expired_token(self):
+    def test_expired_token(self) -> None:
         token = _make_token(expires_in=-100)
         mock_kr = mock.MagicMock()
         mock_kr.get_password.return_value = json.dumps(token)
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
         self.assertIsNone(result)
 
-    def test_token_within_margin(self):
+    def test_token_within_margin(self) -> None:
         token = _make_token(expires_in=EXPIRY_MARGIN_SECONDS - 1)
         mock_kr = mock.MagicMock()
         mock_kr.get_password.return_value = json.dumps(token)
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
         self.assertIsNone(result)
 
-    def test_no_expires_at(self):
+    def test_no_expires_at(self) -> None:
         token = {"access_token": "eyJ.test.token", "token_type": "bearer"}
         mock_kr = mock.MagicMock()
         mock_kr.get_password.return_value = json.dumps(token)
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
         self.assertIsNone(result)
 
-    def test_corrupt_json(self):
+    def test_corrupt_json(self) -> None:
         mock_kr = mock.MagicMock()
         mock_kr.get_password.return_value = "not valid json!!!"
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
         self.assertIsNone(result)
 
-    def test_keyring_error(self):
+    def test_keyring_error(self) -> None:
         mock_kr = mock.MagicMock()
         mock_kr.get_password.side_effect = Exception("keyring error")
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
         self.assertIsNone(result)
 
-    def test_includes_refresh_token(self):
+    def test_includes_refresh_token(self) -> None:
         token = _make_token(extra={"refresh_token": "refresh-abc"})
         mock_kr = mock.MagicMock()
         mock_kr.get_password.return_value = json.dumps(token)
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result["refresh_token"], "refresh-abc")
 
 
 class SaveTokenTest(unittest.TestCase):
-    def test_keyring_not_available(self):
+    def test_keyring_not_available(self) -> None:
         # Should not raise
         _cache_no_keyring().save("https://auth.app.kognic.com", "client-1", _make_token())
 
-    def test_saves_to_keyring(self):
+    def test_saves_to_keyring(self) -> None:
         token = _make_token()
         mock_kr = mock.MagicMock()
         _cache_with_keyring(mock_kr).save("https://auth.app.kognic.com", "client-1", token)
@@ -143,7 +144,7 @@ class SaveTokenTest(unittest.TestCase):
             json.dumps(token),
         )
 
-    def test_save_error_silenced(self):
+    def test_save_error_silenced(self) -> None:
         mock_kr = mock.MagicMock()
         mock_kr.set_password.side_effect = Exception("write failed")
         # Should not raise
@@ -151,11 +152,11 @@ class SaveTokenTest(unittest.TestCase):
 
 
 class ClearTokenTest(unittest.TestCase):
-    def test_keyring_not_available(self):
+    def test_keyring_not_available(self) -> None:
         # Should not raise
         _cache_no_keyring().clear("https://auth.app.kognic.com", "client-1")
 
-    def test_clears_from_keyring(self):
+    def test_clears_from_keyring(self) -> None:
         mock_kr = mock.MagicMock()
         _cache_with_keyring(mock_kr).clear("https://auth.app.kognic.com", "client-1")
         mock_kr.delete_password.assert_called_once_with(
@@ -163,7 +164,7 @@ class ClearTokenTest(unittest.TestCase):
             "https://auth.app.kognic.com:client-1",
         )
 
-    def test_clear_error_silenced(self):
+    def test_clear_error_silenced(self) -> None:
         mock_kr = mock.MagicMock()
         mock_kr.delete_password.side_effect = Exception("delete failed")
         # Should not raise

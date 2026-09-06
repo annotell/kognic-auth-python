@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from kognic.auth import DEFAULT_CACHE_PATH
 from kognic.auth.internal.token_cache._base import TokenCache, is_valid, make_key
 
-log = logging.getLogger(__name__)
+log: logging.Logger = logging.getLogger(__name__)
 
 
 class FileTokenCache(TokenCache):
@@ -17,7 +17,7 @@ class FileTokenCache(TokenCache):
     def __init__(self, path: Path = DEFAULT_CACHE_PATH) -> None:
         self.path = path
 
-    def _load_all(self) -> dict:
+    def _load_all(self) -> Dict[str, Any]:
         try:
             return json.loads(self.path.read_text())
         except FileNotFoundError:
@@ -26,11 +26,11 @@ class FileTokenCache(TokenCache):
             log.debug("Failed to read token cache file", exc_info=True)
             return {}
 
-    def _save_all(self, data: dict) -> None:
+    def _save_all(self, data: Dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(data, indent=2))
 
-    def load(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> Optional[dict]:
+    def load(self, auth_server: str, client_id: str, scopes: Optional[str] = None) -> Optional[Dict[str, Any]]:
         try:
             key = make_key(auth_server, client_id, scopes)
             token = self._load_all().get(key)
@@ -45,7 +45,7 @@ class FileTokenCache(TokenCache):
             log.debug("Failed to load token from file cache", exc_info=True)
             return None
 
-    def save(self, auth_server: str, client_id: str, token: dict, scopes: Optional[str] = None) -> None:
+    def save(self, auth_server: str, client_id: str, token: Dict[str, Any], scopes: Optional[str] = None) -> None:
         try:
             key = make_key(auth_server, client_id, scopes)
             data = self._load_all()

@@ -27,7 +27,7 @@ def make_cache(mode: str) -> TokenCache | None:
         return KeyringTokenCache()
     # auto
     candidate = KeyringTokenCache()
-    if candidate._keyring() is not None:
+    if candidate.keyring() is not None:
         return candidate
     return FileTokenCache()
 

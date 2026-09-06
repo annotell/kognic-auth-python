@@ -1,20 +1,21 @@
 import datetime
 import unittest
+from typing import Any, Dict, Optional
 
 from kognic.auth.base.auth_client import AuthClient
 
 
 class TestAuthClient(AuthClient):
-    def __init__(self, token: dict):
-        self._token = token
+    def __init__(self, token: Dict[str, Any]) -> None:
+        self._token: Dict[str, Any] = token
 
     @property
-    def token(self):
+    def token(self) -> Optional[Dict[str, Any]]:
         return self._token
 
 
 class AuthClientTests(unittest.TestCase):
-    def test_auth_client(self):
+    def test_auth_client(self) -> None:
         expires_at = 1729670977
         expect = datetime.datetime(2024, 10, 23, 8, 9, 37, tzinfo=datetime.timezone.utc)
         client = TestAuthClient(token={"expires_at": expires_at, "expires_in": 3600})

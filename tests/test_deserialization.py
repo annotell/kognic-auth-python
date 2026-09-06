@@ -8,42 +8,42 @@ from kognic.auth.serde import deserialize
 
 
 class TestDeserialize(unittest.TestCase):
-    def test_deserialize_to_raw(self):
+    def test_deserialize_to_raw(self) -> None:
         resp = Response(200, json={"data": {"key": "value"}})
         val = deserialize(resp)
         self.assertEqual(val, {"key": "value"})
 
-    def test_deserialize_with_custom_envelope_key(self):
+    def test_deserialize_with_custom_envelope_key(self) -> None:
         resp = {"custom_key": {"key": "value"}}
         val = deserialize(resp, enveloped_key="custom_key")
         self.assertEqual(val, {"key": "value"})
 
-    def test_deserialize_from_dict(self):
+    def test_deserialize_from_dict(self) -> None:
         resp = {"data": {"key": "value"}}
         val = deserialize(resp)
         self.assertEqual(val, {"key": "value"})
 
-    def test_deserialize_list(self):
+    def test_deserialize_list(self) -> None:
         resp = Response(200, json={"data": [1, 2, 3]})
         val = deserialize(resp)
         self.assertEqual(val, [1, 2, 3])
 
-    def test_deserialize_list_of_dicts(self):
+    def test_deserialize_list_of_dicts(self) -> None:
         resp = Response(200, json={"data": [{"key": "value"}]})
         val = deserialize(resp)
         self.assertEqual(val, [{"key": "value"}])
 
-    def test_deserialize_empty_list(self):
+    def test_deserialize_empty_list(self) -> None:
         resp = Response(200, json={"data": []})
         val = deserialize(resp)
         self.assertEqual(val, [])
 
-    def test_deserialize_no_envelope(self):
+    def test_deserialize_no_envelope(self) -> None:
         resp = Response(200, json={"key": "value"})
         val = deserialize(resp, enveloped_key=None)
         self.assertEqual(val, {"key": "value"})
 
-    def test_deserialize_missing_envelope_key_raises(self):
+    def test_deserialize_missing_envelope_key_raises(self) -> None:
         resp = Response(200, json={"wrong_key": {"key": "value"}})
         with self.assertRaises(ValueError) as context:
             deserialize(resp)
