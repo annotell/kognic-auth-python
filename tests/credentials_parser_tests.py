@@ -4,7 +4,7 @@ from kognic.auth import credentials_parser
 
 
 class CredentialsParserTest(unittest.TestCase):
-    def test_parse_credentials(self):
+    def test_parse_credentials(self) -> None:
         p = {
             "clientId": "CLIENT_ID",
             "clientSecret": "SECRET",

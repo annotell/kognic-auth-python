@@ -27,19 +27,19 @@ def _creds_with_scopes(scopes):
 class TestMakeTokenProviderScopeResolution(unittest.TestCase):
     """The requested scope depends on how None vs an empty list interact with credentials-file scopes."""
 
-    def test_explicit_scopes_override_credentials_scopes(self):
+    def test_explicit_scopes_override_credentials_scopes(self) -> None:
         provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=["api:write"])
         self.assertEqual(provider.oauth_session.scope, "api:write")
 
-    def test_multiple_scopes_are_space_joined(self):
+    def test_multiple_scopes_are_space_joined(self) -> None:
         provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=["api:read", "api:write"])
         self.assertEqual(provider.oauth_session.scope, "api:read api:write")
 
-    def test_none_scopes_fall_back_to_credentials_scopes(self):
+    def test_none_scopes_fall_back_to_credentials_scopes(self) -> None:
         provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=None)
         self.assertEqual(provider.oauth_session.scope, "api:read")
 
-    def test_empty_scopes_suppress_credentials_fallback(self):
+    def test_empty_scopes_suppress_credentials_fallback(self) -> None:
         # An empty list is not None, so the credentials-file fallback is skipped and no scope is requested.
         # This is why kog forwards `env.scopes or None` rather than the raw (possibly empty) list.
         provider = make_token_provider(auth=_creds_with_scopes(["api:read"]), scopes=[])
@@ -57,7 +57,7 @@ def _make_fixed_session():
 
 
 class TestKognicBearerAuthCall(unittest.TestCase):
-    def test_injects_bearer_token(self):
+    def test_injects_bearer_token(self) -> None:
         provider = MagicMock()
         provider.ensure_token.return_value = {"access_token": "tok-abc"}
 
@@ -73,7 +73,7 @@ class TestKognicBearerAuthCall(unittest.TestCase):
 
 
 class TestKognicBearerAuthHandle401(unittest.TestCase):
-    def _make_auth(self, new_token="fresh-token"):
+    def _make_auth(self, new_token: str = "fresh-token"):
         provider = MagicMock()
         provider.ensure_token.return_value = {"access_token": new_token}
         return KognicBearerAuth(provider), provider
@@ -92,7 +92,7 @@ class TestKognicBearerAuthHandle401(unittest.TestCase):
         resp.connection.send.return_value = retry_resp
         return resp, retry_resp
 
-    def test_non_401_passes_through(self):
+    def test_non_401_passes_through(self) -> None:
         auth, provider = self._make_auth()
         resp = MagicMock(spec=requests.Response)
         resp.status_code = 200
@@ -102,7 +102,7 @@ class TestKognicBearerAuthHandle401(unittest.TestCase):
         self.assertIs(result, resp)
         provider.invalidate_token.assert_not_called()
 
-    def test_401_invalidates_token(self):
+    def test_401_invalidates_token(self) -> None:
         auth, provider = self._make_auth()
         resp, _ = self._make_401_response()
 
@@ -110,7 +110,7 @@ class TestKognicBearerAuthHandle401(unittest.TestCase):
 
         provider.invalidate_token.assert_called_once()
 
-    def test_401_retries_with_new_token(self):
+    def test_401_retries_with_new_token(self) -> None:
         auth, provider = self._make_auth("brand-new-token")
         resp, retry_resp = self._make_401_response()
 
@@ -123,7 +123,7 @@ class TestKognicBearerAuthHandle401(unittest.TestCase):
         resp.connection.send.assert_called_once_with(copied)
         self.assertIs(result, retry_resp)
 
-    def test_401_original_response_appended_to_history(self):
+    def test_401_original_response_appended_to_history(self) -> None:
         auth, _ = self._make_auth()
         resp, retry_resp = self._make_401_response()
 
@@ -131,7 +131,7 @@ class TestKognicBearerAuthHandle401(unittest.TestCase):
 
         self.assertIn(resp, retry_resp.history)
 
-    def test_401_passes_kwargs_to_send(self):
+    def test_401_passes_kwargs_to_send(self) -> None:
         auth, _ = self._make_auth()
         resp, retry_resp = self._make_401_response()
 
@@ -143,7 +143,7 @@ class TestKognicBearerAuthHandle401(unittest.TestCase):
 
 
 class TestFixedSessionRefreshToken(unittest.TestCase):
-    def test_authlib_invalid_token_calls_fetch_token(self):
+    def test_authlib_invalid_token_calls_fetch_token(self) -> None:
         session = _make_fixed_session()
         err = AuthlibBaseError(error="invalid_token", description="expired")
 
@@ -153,7 +153,7 @@ class TestFixedSessionRefreshToken(unittest.TestCase):
 
         mock_fetch.assert_called_once()
 
-    def test_authlib_other_error_reraises(self):
+    def test_authlib_other_error_reraises(self) -> None:
         session = _make_fixed_session()
         err = AuthlibBaseError(error="server_error", description="oops")
 
@@ -163,7 +163,7 @@ class TestFixedSessionRefreshToken(unittest.TestCase):
 
         self.assertEqual(cm.exception.error, "server_error")
 
-    def test_http_401_invalid_token_calls_fetch_token(self):
+    def test_http_401_invalid_token_calls_fetch_token(self) -> None:
         session = _make_fixed_session()
         http_resp = MagicMock(spec=requests.Response)
         http_resp.status_code = 401
@@ -176,7 +176,7 @@ class TestFixedSessionRefreshToken(unittest.TestCase):
 
         mock_fetch.assert_called_once()
 
-    def test_http_401_other_error_reraises(self):
+    def test_http_401_other_error_reraises(self) -> None:
         session = _make_fixed_session()
         http_resp = MagicMock(spec=requests.Response)
         http_resp.status_code = 401
@@ -187,7 +187,7 @@ class TestFixedSessionRefreshToken(unittest.TestCase):
             with self.assertRaises(requests.exceptions.HTTPError):
                 session.refresh_token("https://auth.kognic.com/token")
 
-    def test_http_non_401_reraises(self):
+    def test_http_non_401_reraises(self) -> None:
         session = _make_fixed_session()
         http_resp = MagicMock(spec=requests.Response)
         http_resp.status_code = 500

@@ -14,7 +14,7 @@ class TestAuthClient(AuthClient):
 
 
 class AuthClientTests(unittest.TestCase):
-    def test_auth_client(self):
+    def test_auth_client(self) -> None:
         expires_at = 1729670977
         expect = datetime.datetime(2024, 10, 23, 8, 9, 37, tzinfo=datetime.timezone.utc)
         client = TestAuthClient(token={"expires_at": expires_at, "expires_in": 3600})

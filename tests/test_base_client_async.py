@@ -4,12 +4,13 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 from unittest.mock import patch
 
 
 class TestBaseAsyncApiClient(unittest.TestCase):
     @patch("kognic.auth.httpx.base_client.HttpxAuthAsyncClient.__init__", return_value=None)
-    def test_client_name_auto(self, mock_init):
+    def test_client_name_auto(self, mock_init: mock.MagicMock) -> None:
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
         # Need to manually set _oauth_client since we mocked __init__
@@ -21,13 +22,13 @@ class TestBaseAsyncApiClient(unittest.TestCase):
                 client_name = client.__class__.__name__
             self.assertEqual(client_name, "BaseAsyncApiClient")
 
-    def test_inherits_from_httpx_auth_client(self):
+    def test_inherits_from_httpx_auth_client(self) -> None:
         from kognic.auth.httpx.async_client import HttpxAuthAsyncClient
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
         self.assertTrue(issubclass(BaseAsyncApiClient, HttpxAuthAsyncClient))
 
-    def test_has_context_manager_methods(self):
+    def test_has_context_manager_methods(self) -> None:
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
         self.assertTrue(hasattr(BaseAsyncApiClient, "__aenter__"))
@@ -44,7 +45,7 @@ class TestBaseAsyncApiClientFromEnv(unittest.TestCase):
         return f.name
 
     @patch("kognic.auth.httpx.base_client.HttpxAuthAsyncClient.__init__", return_value=None)
-    def test_from_env_passes_resolved_values(self, mock_init):
+    def test_from_env_passes_resolved_values(self, mock_init: mock.MagicMock) -> None:
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
         config_path = self._write_config(
@@ -71,7 +72,7 @@ class TestBaseAsyncApiClientFromEnv(unittest.TestCase):
         finally:
             Path(config_path).unlink()
 
-    def test_unknown_env_raises(self):
+    def test_unknown_env_raises(self) -> None:
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
         config_path = self._write_config({"environments": {}})

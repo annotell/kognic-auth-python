@@ -152,55 +152,55 @@ RECOVERS_ON_LAST_ATTEMPT = [503, 503, 503, 200]
 
 
 class TestAsyncRetry:
-    async def test_post_is_not_retried(self):
+    async def test_post_is_not_retried(self) -> None:
         attempts, status = await _async_attempts("POST", ALWAYS_503)
         assert attempts == 1
         assert status is None
 
-    async def test_lowercase_post_is_not_retried(self):
+    async def test_lowercase_post_is_not_retried(self) -> None:
         attempts, _ = await _async_attempts("post", ALWAYS_503)
         assert attempts == 1
 
-    async def test_patch_is_not_retried(self):
+    async def test_patch_is_not_retried(self) -> None:
         attempts, _ = await _async_attempts("PATCH", ALWAYS_503)
         assert attempts == 1
 
-    async def test_get_is_retried_until_attempts_are_exhausted(self):
+    async def test_get_is_retried_until_attempts_are_exhausted(self) -> None:
         attempts, status = await _async_attempts("GET", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
         assert status is None
 
-    async def test_get_returns_the_first_success(self):
+    async def test_get_returns_the_first_success(self) -> None:
         attempts, status = await _async_attempts("GET", RECOVERS_ON_LAST_ATTEMPT)
         assert attempts == TOTAL_ATTEMPTS
         assert status == 200
 
-    async def test_put_is_retried(self):
+    async def test_put_is_retried(self) -> None:
         attempts, _ = await _async_attempts("PUT", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
 
 
 class TestSyncRetry:
-    def test_post_is_not_retried(self):
+    def test_post_is_not_retried(self) -> None:
         attempts, status = _sync_attempts("POST", ALWAYS_503)
         assert attempts == 1
         assert status is None
 
-    def test_patch_is_not_retried(self):
+    def test_patch_is_not_retried(self) -> None:
         attempts, _ = _sync_attempts("PATCH", ALWAYS_503)
         assert attempts == 1
 
-    def test_get_is_retried_until_attempts_are_exhausted(self):
+    def test_get_is_retried_until_attempts_are_exhausted(self) -> None:
         attempts, status = _sync_attempts("GET", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
         assert status is None
 
-    def test_get_returns_the_first_success(self):
+    def test_get_returns_the_first_success(self) -> None:
         attempts, status = _sync_attempts("GET", RECOVERS_ON_LAST_ATTEMPT)
         assert attempts == TOTAL_ATTEMPTS
         assert status == 200
 
-    def test_put_is_retried(self):
+    def test_put_is_retried(self) -> None:
         attempts, _ = _sync_attempts("PUT", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
 
@@ -288,20 +288,20 @@ class TestTokenFetchRetry:
     down every caller holding a client.
     """
 
-    async def test_async_token_fetch_is_retried(self):
+    async def test_async_token_fetch_is_retried(self) -> None:
         attempts, _ = await _async_token_fetch_attempts(ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
 
-    async def test_async_token_fetch_recovers(self):
+    async def test_async_token_fetch_recovers(self) -> None:
         attempts, succeeded = await _async_token_fetch_attempts(RECOVERS_ON_LAST_ATTEMPT)
         assert attempts == TOTAL_ATTEMPTS
         assert succeeded
 
-    def test_sync_token_fetch_is_retried(self):
+    def test_sync_token_fetch_is_retried(self) -> None:
         attempts, _ = _sync_token_fetch(ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
 
-    def test_sync_token_fetch_surfaces_the_auth_server_response(self):
+    def test_sync_token_fetch_surfaces_the_auth_server_response(self) -> None:
         # An exhausted retry must hand back the auth server's own failure, not a urllib3
         # RetryError, so the caller can read why authentication failed.
         _, error = _sync_token_fetch(ALWAYS_503)
@@ -310,7 +310,7 @@ class TestTokenFetchRetry:
         assert error.response.status_code == 503
         assert "transient" in error.response.text
 
-    def test_caller_post_through_the_auth_session_is_not_retried(self):
+    def test_caller_post_through_the_auth_session_is_not_retried(self) -> None:
         # The token retry is mounted on the token URL, so a caller's own POST through the same
         # session keeps the default policy and is never replayed.
         assert _auth_session_caller_attempts("POST", ALWAYS_503) == 1
@@ -318,10 +318,10 @@ class TestTokenFetchRetry:
 
 class TestSharedPolicy:
     def test_sync_retry_policy_uses_the_shared_method_set(self):
-        # Identity, not equality: urllib3's own default happens to hold the same methods, so
+        # Identity, not equality -> None: urllib3's own default happens to hold the same methods, so
         # only an identity check proves the sync client is driven by the shared constant.
         assert DEFAULT_RETRY.allowed_methods is RETRYABLE_METHODS
 
-    def test_non_idempotent_methods_are_excluded(self):
+    def test_non_idempotent_methods_are_excluded(self) -> None:
         assert "POST" not in RETRYABLE_METHODS
         assert "PATCH" not in RETRYABLE_METHODS

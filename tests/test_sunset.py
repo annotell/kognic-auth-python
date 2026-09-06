@@ -52,31 +52,31 @@ class TestSunsetDateRequests(TestCase):
     def inject_fixtures(self, caplog):
         self._caplog = caplog
 
-    def test_when_sunset_date_not_set(self):
+    def test_when_sunset_date_not_set(self) -> None:
         response = make_requests_response(None)
         run_test_with_response(self._caplog, response, None)
 
-    def test_when_sunset_date_invalid(self):
+    def test_when_sunset_date_invalid(self) -> None:
         response = make_requests_response(SUNSET_DATE_WRONG_FORMAT)
         run_test_with_response(self._caplog, response, None)
 
-    def test_when_sunset_date_no_microseconds(self):
+    def test_when_sunset_date_no_microseconds(self) -> None:
         response = make_requests_response(SUNSET_DATE_NO_MICROSECONDS)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_long_time_ago(self):
+    def test_when_sunset_date_long_time_ago(self) -> None:
         response = make_requests_response(SUNSET_DATE_LONG_TIME_AGO)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_5_days_ago(self):
+    def test_when_sunset_date_5_days_ago(self) -> None:
         response = make_requests_response(SUNSET_DATE_5_DAYS_AGO)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_in_13_days(self):
+    def test_when_sunset_date_in_13_days(self) -> None:
         response = make_requests_response(SUNSET_DATE_IN_13_DAYS)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_in_15_days(self):
+    def test_when_sunset_date_in_15_days(self) -> None:
         response = make_requests_response(SUNSET_DATE_IN_15_DAYS)
         run_test_with_response(self._caplog, response, "WARNING")
 
@@ -86,30 +86,30 @@ class TestSunsetDateHttpx(TestCase):
     def inject_fixtures(self, caplog):
         self._caplog = caplog
 
-    def test_when_sunset_date_not_set(self):
+    def test_when_sunset_date_not_set(self) -> None:
         response = make_httpx_response(None)
         run_test_with_response(self._caplog, response, None)
 
-    def test_when_sunset_date_invalid(self):
+    def test_when_sunset_date_invalid(self) -> None:
         response = make_httpx_response(SUNSET_DATE_WRONG_FORMAT)
         run_test_with_response(self._caplog, response, None)
 
-    def test_when_sunset_date_no_microseconds(self):
+    def test_when_sunset_date_no_microseconds(self) -> None:
         response = make_httpx_response(SUNSET_DATE_NO_MICROSECONDS)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_long_time_ago(self):
+    def test_when_sunset_date_long_time_ago(self) -> None:
         response = make_httpx_response(SUNSET_DATE_LONG_TIME_AGO)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_5_days_ago(self):
+    def test_when_sunset_date_5_days_ago(self) -> None:
         response = make_httpx_response(SUNSET_DATE_5_DAYS_AGO)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_in_13_days(self):
+    def test_when_sunset_date_in_13_days(self) -> None:
         response = make_httpx_response(SUNSET_DATE_IN_13_DAYS)
         run_test_with_response(self._caplog, response, "ERROR")
 
-    def test_when_sunset_date_in_15_days(self):
+    def test_when_sunset_date_in_15_days(self) -> None:
         response = make_httpx_response(SUNSET_DATE_IN_15_DAYS)
         run_test_with_response(self._caplog, response, "WARNING")
