@@ -1,11 +1,16 @@
 import logging
 import threading
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import requests
 from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.requests_client import OAuth2Session
-from requests.adapters import HTTPAdapter, Retry
+from authlib.oauth2.rfc6749 import OAuth2Token
+from requests import Session
+
+# requests re-exports Retry from urllib3 but its stubs do not mark it exported; importing
+# from urllib3 directly would mean depending on a package we do not declare.
+from requests.adapters import HTTPAdapter, Retry  # pyright: ignore[reportPrivateImportUsage]
 
 from kognic.auth import (
     DEFAULT_HOST,
@@ -46,9 +51,13 @@ class _FixedSession(OAuth2Session):
     session self-heals transparently.
     """
 
-    def refresh_token(self, url, **kwargs):
+    def refresh_token(
+        self, url: Optional[str] = None, refresh_token: Optional[str] = None, **kwargs: Any
+    ) -> OAuth2Token:
         try:
-            super(_FixedSession, self).refresh_token(url, **kwargs)
+            # The parent returns the refreshed token; returning it here too keeps the
+            # override honest. Authlib itself discards the value.
+            return super(_FixedSession, self).refresh_token(url, refresh_token=refresh_token, **kwargs)
         except AuthlibBaseError as e:
             if e.error == "invalid_token":
                 log.info("Refresh token expired, resetting auth session")
@@ -77,11 +86,11 @@ class RequestsAuthSession(AuthClient):
         client_secret: Optional[str] = None,
         host: str = DEFAULT_HOST,
         token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
-        initial_token: Optional[dict] = None,
-        on_token_updated: Optional[Callable[[dict], None]] = None,
+        initial_token: Optional[Dict[str, Any]] = None,
+        on_token_updated: Optional[Callable[[Dict[str, Any]], None]] = None,
         scopes: Optional[List[str]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize the auth session.
 
         Args:
@@ -131,28 +140,39 @@ class RequestsAuthSession(AuthClient):
         return self._client_id
 
     @property
-    def token(self):
+    def token(self) -> Optional[Dict[str, Any]]:
         return self.oauth_session.token
 
-    def _update_token(self, token, access_token=None, refresh_token=None):
+    def _update_token(
+        self,
+        token: Dict[str, Any],
+        access_token: Optional[str] = None,
+        refresh_token: Optional[str] = None,
+    ) -> None:
         self._log_new_token()
         if self._on_token_updated is not None:
             self._on_token_updated(token)
 
-    def ensure_token(self) -> dict:
+    def ensure_token(self) -> Dict[str, Any]:
         """Return a valid token, fetching one if needed. Thread-safe."""
         if not self.token:
             with self._lock:
                 if not self.token:
                     token = self.oauth_session.fetch_access_token(url=self.token_url)
                     self._update_token(token)
-        return self.token
+        current = self.token
+        if current is None:
+            # fetch_access_token raises rather than returning nothing, so this is
+            # unreachable in practice; it beats handing callers a None they will
+            # subscript.
+            raise RuntimeError("Failed to obtain an access token")
+        return current
 
     def invalidate_token(self) -> None:
         """Clear the cached token so the next ensure_token() call fetches a fresh one."""
         self.oauth_session.token = None
 
     @property
-    def session(self):
+    def session(self) -> Session:
         self.ensure_token()
         return self.oauth_session.session

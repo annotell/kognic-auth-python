@@ -5,16 +5,17 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from importlib.metadata import version
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union
 from weakref import WeakValueDictionary
-
-if TYPE_CHECKING:
-    from typing import Self
 
 import requests
 from requests import Session
-from requests.adapters import HTTPAdapter, Retry
+
+# requests re-exports Retry from urllib3 but its stubs do not mark it exported; importing
+# from urllib3 directly would mean depending on a package we do not declare.
+from requests.adapters import HTTPAdapter, Retry  # pyright: ignore[reportPrivateImportUsage]
 
 from kognic.auth import (
     DEFAULT_HOST,
@@ -47,8 +48,14 @@ DEFAULT_RETRY = Retry(
 
 _DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
 
+# requests.__version__ is a re-export its stubs do not mark as public.
+_REQUESTS_VERSION = version("requests")
 
-def _check_response(resp: requests.Response, sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER):
+# typing.Self is 3.11+, and this package supports 3.10.
+_ClientT = TypeVar("_ClientT", bound="BaseApiClient")
+
+
+def _check_response(resp: requests.Response, sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER) -> None:
     """Handle sunset headers and raise for status with enhanced error messages."""
     handle_sunset(resp, sunset_handler)
     try:
@@ -67,16 +74,16 @@ def _check_response(resp: requests.Response, sunset_handler: Optional[SunsetHand
         ) from e
 
 
-def _set_session_user_agent(session: Session, client_name: Optional[str] = None):
+def _set_session_user_agent(session: Session, client_name: Optional[str] = None) -> None:
     """Set the User-Agent header for the session, including the client name if provided."""
-    session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", client_name)
+    session.headers["User-Agent"] = get_user_agent(f"requests/{_REQUESTS_VERSION}", client_name)
 
 
 def _monkey_patch_send(
     session: Session,
     json_serializer: Callable[[Any], Any],
     sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
-):
+) -> None:
     """
     Monkey patch to serialize JSON and validate paths
     :param session:
@@ -85,8 +92,9 @@ def _monkey_patch_send(
     """
     vanilla_prep = session.prepare_request
 
-    def prepare_request(req, *args, **kwargs):
-        if req.url.startswith("/"):
+    def prepare_request(req: requests.Request, *args: Any, **kwargs: Any) -> requests.PreparedRequest:
+        # requests.Request.url is optional and may be bytes; only a str path can be checked.
+        if isinstance(req.url, str) and req.url.startswith("/"):
             raise ValueError(f"Path must not start with /, got {req.url}")
 
         # Accept anything jsonable as json, serialize it
@@ -95,17 +103,18 @@ def _monkey_patch_send(
 
         return vanilla_prep(req, *args, **kwargs)
 
-    session.prepare_request = prepare_request
+    # Deliberate monkey patch: requests has no hook for rewriting the outgoing body.
+    session.prepare_request = prepare_request  # pyright: ignore[reportAttributeAccessIssue]
 
     # Monkey patch to always raise for status and handle errors
     vanilla_send = session.send
 
-    def send_request(req, *args, **kwargs):
+    def send_request(req: requests.PreparedRequest, *args: Any, **kwargs: Any) -> requests.Response:
         resp = vanilla_send(req, *args, **kwargs)
         _check_response(resp, sunset_handler)
         return resp
 
-    session.send = send_request
+    session.send = send_request  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def create_session(
@@ -115,8 +124,8 @@ def create_session(
     auth_token_endpoint: str = DEFAULT_TOKEN_ENDPOINT_RELPATH,
     client_name: Optional[str] = None,
     json_serializer: Callable[[Any], Any] = serialize_body,
-    initial_token: Optional[dict] = None,
-    on_token_updated: Optional[Callable[[dict], None]] = None,
+    initial_token: Optional[Dict[str, Any]] = None,
+    on_token_updated: Optional[Callable[[Dict[str, Any]], None]] = None,
     token_provider: Optional[RequestsAuthSession] = None,
     sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
     scopes: Optional[List[str]] = None,
@@ -201,7 +210,10 @@ def make_token_provider(
     )
 
 
-_provider_pool: WeakValueDictionary[tuple, RequestsAuthSession] = WeakValueDictionary()
+# (client_id, auth_host, auth_token_endpoint, token cache class, scopes)
+_ProviderKey = Tuple[str, str, str, Type[Any], Optional[Tuple[str, ...]]]
+
+_provider_pool: WeakValueDictionary[_ProviderKey, RequestsAuthSession] = WeakValueDictionary()
 _provider_pool_lock = threading.Lock()
 
 
@@ -224,7 +236,13 @@ def _get_shared_provider(
     if not client_id or not client_secret:
         return RequestsAuthSession(auth=auth, host=auth_host, token_endpoint=auth_token_endpoint, scopes=scopes)
 
-    key = (client_id, auth_host, auth_token_endpoint, type(token_cache), tuple(scopes) if scopes else None)
+    key: _ProviderKey = (
+        client_id,
+        auth_host,
+        auth_token_endpoint,
+        type(token_cache),
+        tuple(scopes) if scopes else None,
+    )
     with _provider_pool_lock:
         provider = _provider_pool.get(key)
         if provider is None:
@@ -278,7 +296,7 @@ class BaseApiClient:
         token_cache: Optional[TokenCache] = None,
         sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER,
         scopes: Optional[List[str]] = None,
-    ):
+    ) -> None:
         """Initialize the API client.
 
         Args:
@@ -332,12 +350,12 @@ class BaseApiClient:
 
     @classmethod
     def from_env(
-        cls,
+        cls: Type[_ClientT],
         env: str,
         *,
-        env_config_path: Union[str, os.PathLike] = "",
-        **kwargs,
-    ) -> Self:
+        env_config_path: Union[str, "os.PathLike[str]"] = "",
+        **kwargs: Any,
+    ) -> _ClientT:
         """Create a client from a named environment in the config file.
 
         Args:

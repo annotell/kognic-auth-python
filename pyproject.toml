@@ -79,6 +79,7 @@ dev = [
 # one. Matters most for reportDeprecated, since typeshed gates @deprecated on the
 # target version (e.g. datetime.utcnow() is only deprecated from 3.12).
 include = ["src", "tests"]
+stubPath = "stubs"
 exclude = ["src/kognic/auth/_version.py"]
 strict = ["src", "tests"]
 reportDeprecated = "error"
