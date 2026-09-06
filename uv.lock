@@ -468,6 +468,7 @@ name = "kognic-auth"
 source = { editable = "." }
 dependencies = [
     { name = "authlib" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 
 [package.optional-dependencies]
@@ -507,6 +508,7 @@ requires-dist = [
     { name = "requests", marker = "extra == 'cli'", specifier = ">=2.33,<3" },
     { name = "requests", marker = "extra == 'full'", specifier = ">=2.33,<3" },
     { name = "requests", marker = "extra == 'requests'", specifier = ">=2.33,<3" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'", specifier = ">=4.5" },
 ]
 provides-extras = ["httpx", "requests", "cli", "full"]
 

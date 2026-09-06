@@ -1,3 +1,6 @@
+# get_credentials_from_env is deprecated and marked with @deprecated, but its behaviour
+# still needs covering until it is removed, so calling it here is intentional.
+# pyright: reportDeprecated=false
 """Unit tests for credentials_parser module."""
 
 import json

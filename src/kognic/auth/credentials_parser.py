@@ -1,9 +1,15 @@
 import json
 import os
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union, cast
+
+if sys.version_info >= (3, 13):
+    from warnings import deprecated
+else:
+    from typing_extensions import deprecated
 
 from kognic.auth.credentials import ApiCredentials
 from kognic.auth.internal import credentials_store
@@ -78,10 +84,12 @@ def parse_credentials(path: Union[str, "os.PathLike[str]", Dict[str, Any]]) -> A
     )
 
 
+@deprecated("Use get_credentials_from_system(), which returns the full ApiCredentials.")
 def get_credentials_from_env() -> tuple[Optional[str], Optional[str]]:
-    """
-    Deprecated
-    :return:
+    """Return just the client id and secret.
+
+    .. deprecated::
+        Use :func:`get_credentials_from_system`, which returns the full credentials.
     """
     creds = get_credentials_from_system()
     if creds:

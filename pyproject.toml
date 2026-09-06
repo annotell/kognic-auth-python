@@ -14,7 +14,9 @@ authors = [
 ]
 description = "Kognic Authentication"
 dependencies = [
-    "authlib>=0.14.1,<1.8"
+    "authlib>=0.14.1,<1.8",
+    # Only for @deprecated; it lands in the stdlib as warnings.deprecated on 3.13.
+    "typing_extensions>=4.5; python_version < '3.13'",
 ]
 requires-python=">=3.10"
 readme = "README.md"
