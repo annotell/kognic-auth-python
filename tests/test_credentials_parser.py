@@ -5,6 +5,7 @@ import os
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from unittest import mock
 from unittest.mock import patch
 
@@ -34,7 +35,7 @@ class TestParseCredentials(unittest.TestCase):
         self.assertEqual(creds.user_id, 1)
         self.assertEqual(creds.issuer, "auth.kognic.test")
 
-    def test_parse_from_file(self, tmp_path=None) -> None:
+    def test_parse_from_file(self) -> None:
         import tempfile
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -148,7 +149,8 @@ class TestResolveCredentials(unittest.TestCase):
 
     def test_auth_tuple_wrong_length_raises(self) -> None:
         with self.assertRaises(ValueError) as ctx:
-            resolve_credentials(auth=("only_one",))
+            # deliberately the wrong shape: ANY_AUTH_TYPE is a 2-tuple
+            resolve_credentials(auth=("only_one",))  # pyright: ignore[reportArgumentType]
         self.assertIn("tuple", str(ctx.exception))
 
     def test_explicit_client_id_and_secret(self) -> None:
@@ -208,7 +210,8 @@ class TestResolveCredentials(unittest.TestCase):
 
     def test_auth_unsupported_type_raises(self) -> None:
         with self.assertRaises(ValueError):
-            resolve_credentials(auth=12345)
+            # deliberately an unsupported type
+            resolve_credentials(auth=12345)  # pyright: ignore[reportArgumentType]
 
     def test_auth_dict(self) -> None:
         client_id, client_secret = resolve_credentials(auth=VALID_CREDENTIALS_DICT)
@@ -234,7 +237,7 @@ class TestResolveCredentials(unittest.TestCase):
         self.assertIn("missing-profile", str(ctx.exception))
 
 
-def _make_creds(**kwargs) -> ApiCredentials:
+def _make_creds(**kwargs: Any) -> ApiCredentials:
     return ApiCredentials(
         client_id="id",
         client_secret="secret",

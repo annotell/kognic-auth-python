@@ -1,13 +1,14 @@
 import json
 import time
 import unittest
+from typing import Any, Dict, Optional
 from unittest import mock
 
 from kognic.auth.internal.token_cache import KeyringTokenCache
 from kognic.auth.internal.token_cache._base import EXPIRY_MARGIN_SECONDS, SERVICE_NAME, make_key
 
 
-def _make_token(*, expires_in: int = 3600, extra=None):
+def _make_token(*, expires_in: int = 3600, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Create a realistic token dict."""
     now = time.time()
     token = {
@@ -83,7 +84,7 @@ class LoadCachedTokenTest(unittest.TestCase):
         mock_kr = mock.MagicMock()
         mock_kr.get_password.return_value = json.dumps(token)
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result["access_token"], "eyJ.test.token")
 
     def test_expired_token(self) -> None:
@@ -124,7 +125,7 @@ class LoadCachedTokenTest(unittest.TestCase):
         mock_kr = mock.MagicMock()
         mock_kr.get_password.return_value = json.dumps(token)
         result = _cache_with_keyring(mock_kr).load("https://auth.app.kognic.com", "client-1")
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result["refresh_token"], "refresh-abc")
 
 

@@ -1,7 +1,6 @@
 from typing import Any, Callable, Mapping
 
 import httpx
-
 from authlib.oauth2.client import OAuth2Client
 from authlib.oauth2.rfc6749 import OAuth2Token
 

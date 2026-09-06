@@ -1,9 +1,8 @@
 from typing import Any, Callable, Mapping
 
-from requests import Session
-
 from authlib.oauth2.client import OAuth2Client
 from authlib.oauth2.rfc6749 import OAuth2Token
+from requests import Session
 
 __all__ = ["OAuth2Session"]
 

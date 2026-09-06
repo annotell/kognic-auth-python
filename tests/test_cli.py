@@ -1,7 +1,9 @@
+import argparse
 import json
 import time
 import unittest
 from pathlib import Path
+from typing import List, Optional
 from unittest import mock
 
 from kognic.auth import DEFAULT_HOST
@@ -66,7 +68,7 @@ class CliParserTest(unittest.TestCase):
 
 
 class CliMainTest(unittest.TestCase):
-    def _make_provider(self, access_token):
+    def _make_provider(self, access_token: str) -> mock.MagicMock:
         provider = mock.MagicMock()
         provider.ensure_token.return_value = {"access_token": access_token}
         return provider
@@ -504,13 +506,13 @@ class CallApiTest(unittest.TestCase):
         self,
         method: str = "get",
         url: str = "https://app.kognic.com/v1/projects",
-        data=None,
-        headers=None,
+        data: Optional[str] = None,
+        headers: Optional[List[str]] = None,
         env_config_file_path: str = "/nonexistent/config.json",
-        env_name=None,
+        env_name: Optional[str] = None,
         token_cache: str = "none",
-        scopes=None,
-    ):
+        scopes: Optional[List[str]] = None,
+    ) -> argparse.Namespace:
         parser = create_kog_parser()
         args = [method, url]
         if data:
@@ -1542,7 +1544,7 @@ class CredentialsCommandTest(unittest.TestCase):
             with mock.patch("kognic.auth.cli.credentials.save_credentials") as mock_save:
                 result = main(["credentials", "put", path])
             self.assertEqual(result, 0)
-            args, kwargs = mock_save.call_args
+            args, _ = mock_save.call_args
             self.assertEqual(args[0].client_id, "test-client-id")
             self.assertEqual(args[0].client_secret, "test-secret")
             self.assertEqual(args[1], "default")
@@ -1568,7 +1570,7 @@ class CredentialsCommandTest(unittest.TestCase):
             with mock.patch("kognic.auth.cli.credentials.save_credentials") as mock_save:
                 result = main(["credentials", "put", path, "--env", "demo"])
             self.assertEqual(result, 0)
-            args, kwargs = mock_save.call_args
+            args, _ = mock_save.call_args
             self.assertEqual(args[0].client_id, "id")
             self.assertEqual(args[0].client_secret, "secret")
             self.assertEqual(args[1], "demo")

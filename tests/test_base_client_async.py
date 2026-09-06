@@ -4,8 +4,14 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, Dict
 from unittest import mock
 from unittest.mock import patch
+
+
+def _no_init(self: Any, **_kwargs: Any) -> None:
+    """Replacement __init__ for a client built with __new__."""
+    return None
 
 
 class TestBaseAsyncApiClient(unittest.TestCase):
@@ -14,7 +20,7 @@ class TestBaseAsyncApiClient(unittest.TestCase):
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
         # Need to manually set _oauth_client since we mocked __init__
-        with patch.object(BaseAsyncApiClient, "__init__", lambda self, **kwargs: None):
+        with patch.object(BaseAsyncApiClient, "__init__", _no_init):
             client = BaseAsyncApiClient.__new__(BaseAsyncApiClient)
             # Simulate what __init__ would do for client_name
             client_name = "auto"
@@ -26,7 +32,8 @@ class TestBaseAsyncApiClient(unittest.TestCase):
         from kognic.auth.httpx.async_client import HttpxAuthAsyncClient
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
 
-        self.assertTrue(issubclass(BaseAsyncApiClient, HttpxAuthAsyncClient))
+        # Pyright proves this statically; kept as an explicit contract check.
+        self.assertTrue(issubclass(BaseAsyncApiClient, HttpxAuthAsyncClient))  # pyright: ignore[reportUnnecessaryIsInstance]
 
     def test_has_context_manager_methods(self) -> None:
         from kognic.auth.httpx.base_client import BaseAsyncApiClient
@@ -37,7 +44,7 @@ class TestBaseAsyncApiClient(unittest.TestCase):
 
 
 class TestBaseAsyncApiClientFromEnv(unittest.TestCase):
-    def _write_config(self, data):
+    def _write_config(self, data: Dict[str, Any]) -> str:
         f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
         json.dump(data, f)
         f.flush()

@@ -1,10 +1,11 @@
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Mapping
 
 from authlib.oauth2.rfc6749 import OAuth2Token
 
 class OAuth2Client:
     client_id: str | None
     client_secret: str | None
+    scope: str | None
     metadata: dict[str, Any]
     leeway: int
     token_endpoint: str | None

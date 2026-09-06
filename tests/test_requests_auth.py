@@ -4,6 +4,7 @@
 """Tests for requests-layer token refresh and 401 retry behaviour."""
 
 import unittest
+from typing import List
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -15,7 +16,7 @@ from kognic.auth.requests.base_client import make_token_provider
 from kognic.auth.requests.bearer_auth import KognicBearerAuth
 
 
-def _creds_with_scopes(scopes):
+def _creds_with_scopes(scopes: List[str]) -> ApiCredentials:
     """Return ApiCredentials that declare the given scopes."""
     return ApiCredentials(
         client_id="test-id",
@@ -136,7 +137,7 @@ class TestKognicBearerAuthHandle401(unittest.TestCase):
 
     def test_401_passes_kwargs_to_send(self) -> None:
         auth, _ = self._make_auth()
-        resp, retry_resp = self._make_401_response()
+        resp, _ = self._make_401_response()
 
         auth._handle_401(resp, timeout=5, verify=False)
 

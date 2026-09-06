@@ -3,8 +3,8 @@
 import unittest
 
 from kognic.auth import __version__
-from kognic.auth._user_agent import (  # pyright: ignore[reportPrivateUsage]
-    _PY_VERSION,
+from kognic.auth._user_agent import (
+    _PY_VERSION,  # pyright: ignore[reportPrivateUsage]
     get_user_agent,
 )
 
