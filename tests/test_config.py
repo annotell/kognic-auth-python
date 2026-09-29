@@ -35,7 +35,7 @@ class LoadConfigTest(unittest.TestCase):
     def test_unreadable_path_returns_empty_config_and_warns(self):
         # the default path lives under HOME, which a container may point at a directory owned by another uid;
         # that must behave like a missing file, and a developer gets told about it
-        with _unreadable_dir() as d, patch.dict(os.environ, {}, clear=False):
+        with _unreadable_dir() as d, patch.dict(os.environ):
             os.environ.pop("KUBERNETES_SERVICE_HOST", None)
             with self.assertLogs("kognic.auth.env_config", level="WARNING") as logs:
                 config = load_kognic_env_config(f"{d}/environments.json")
