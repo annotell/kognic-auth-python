@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -6,6 +7,8 @@ from typing import List, Optional, Union
 from urllib.parse import urlparse
 
 from kognic.auth import DEFAULT_ENV_CONFIG_FILE_PATH, DEFAULT_HOST, DEFAULT_KOGNIC_PLATFORM
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -24,9 +27,18 @@ class KognicEnvConfig:
 
 
 def load_kognic_env_config(path: Union[str, os.PathLike] = DEFAULT_ENV_CONFIG_FILE_PATH) -> KognicEnvConfig:
-    """Load config from JSON file. Returns empty Config if file doesn't exist."""
+    """Load config from JSON file. Returns empty Config if file doesn't exist or cannot be read."""
     expanded = Path(path).expanduser()
-    if not expanded.exists():
+    try:
+        expanded.stat()
+    except (FileNotFoundError, NotADirectoryError):
+        return KognicEnvConfig()
+    except OSError as e:
+        # The default path lives under HOME, which a container may point at a directory owned by another
+        # uid; a path we cannot stat is treated like a missing file. Services in Kubernetes get their
+        # credentials from env variables and never have this file, so only warn on developer machines.
+        if "KUBERNETES_SERVICE_HOST" not in os.environ:
+            logger.warning(f"Ignoring environments config {path} that cannot be read: {e}")
         return KognicEnvConfig()
 
     data = json.loads(expanded.read_text())

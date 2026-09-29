@@ -1,10 +1,28 @@
 import json
+import os
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 from kognic.auth import DEFAULT_HOST
 from kognic.auth.env_config import Environment, KognicEnvConfig, load_kognic_env_config, resolve_environment
+
+
+@contextmanager
+def _unreadable_dir():
+    """A real directory the test process cannot traverse, so stat on anything below it fails with EACCES."""
+    with tempfile.TemporaryDirectory() as d:
+        Path(d).chmod(0o000)
+        try:
+            yield d
+        finally:
+            Path(d).chmod(0o700)
+
+
+# root ignores mode bits, so the EACCES this reproduces never happens for it
+running_as_root = os.geteuid() == 0
 
 
 class LoadConfigTest(unittest.TestCase):
@@ -12,6 +30,24 @@ class LoadConfigTest(unittest.TestCase):
         config = load_kognic_env_config("/nonexistent/path/config.json")
         self.assertEqual(config.environments, {})
         self.assertIsNone(config.default_environment)
+
+    @unittest.skipIf(running_as_root, "root can traverse a mode-000 directory")
+    def test_unreadable_path_returns_empty_config_and_warns(self):
+        # the default path lives under HOME, which a container may point at a directory owned by another uid;
+        # that must behave like a missing file, and a developer gets told about it
+        with _unreadable_dir() as d, patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("KUBERNETES_SERVICE_HOST", None)
+            with self.assertLogs("kognic.auth.env_config", level="WARNING") as logs:
+                config = load_kognic_env_config(f"{d}/environments.json")
+        self.assertEqual(config.environments, {})
+        self.assertIn(f"{d}/environments.json", logs.output[0])
+
+    @unittest.skipIf(running_as_root, "root can traverse a mode-000 directory")
+    def test_unreadable_path_returns_empty_config_silently_in_kubernetes(self):
+        with _unreadable_dir() as d, patch.dict(os.environ, {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}):
+            with self.assertNoLogs("kognic.auth.env_config", level="WARNING"):
+                config = load_kognic_env_config(f"{d}/environments.json")
+        self.assertEqual(config.environments, {})
 
     def test_valid_config(self):
         data = {
