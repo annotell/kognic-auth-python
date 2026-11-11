@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from threading import Lock
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
 from weakref import WeakValueDictionary
@@ -100,8 +101,18 @@ def _monkey_patch_send(
     # Monkey patch to always raise for status and handle errors
     vanilla_send = session.send
 
+    def send_with_body_retry(req, *args, **kwargs):
+        retries = MAX_RETRIES if req.method.upper() in RETRYABLE_METHODS else 0
+        for attempt in range(retries):
+            try:
+                return vanilla_send(req, *args, **kwargs)
+            except requests.exceptions.ChunkedEncodingError as e:
+                logger.warning("Response body from %s %s was cut off, retrying: %s", req.method, req.url, e)
+                time.sleep(RETRY_BACKOFF_FACTOR * 2**attempt)
+        return vanilla_send(req, *args, **kwargs)
+
     def send_request(req, *args, **kwargs):
-        resp = vanilla_send(req, *args, **kwargs)
+        resp = send_with_body_retry(req, *args, **kwargs)
         _check_response(resp, sunset_handler)
         return resp
 

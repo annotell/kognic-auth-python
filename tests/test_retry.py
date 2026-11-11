@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, List, Optional
 
@@ -43,6 +44,7 @@ def _no_sleeping(monkeypatch):
 
     monkeypatch.setattr(asyncio, "sleep", _async_noop)
     monkeypatch.setattr(urllib3.util.retry.Retry, "sleep", lambda self, response=None: None)
+    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
 
 
 class _StatusSequence:
@@ -147,6 +149,49 @@ def _sync_attempts(method: str, statuses: List[int]) -> tuple[int, Optional[int]
         thread.join(timeout=5)
 
 
+class _TruncatingHandler(_CountingHandler):
+    """Sends headers announcing a full body, then cuts the connection mid-body for the first
+    ``truncations`` requests, like a peer resetting the connection while streaming a response."""
+
+    truncations: int
+
+    def _respond(self):
+        self.sequence.next_status()
+        body = b'{"message": "complete"}'
+        truncate = self.sequence.count <= self.truncations
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body[:5] if truncate else body)
+        self.close_connection = True
+
+    do_GET = _respond
+    do_POST = _respond
+    do_PUT = _respond
+
+
+def _sync_truncated_attempts(method: str, truncations: int) -> tuple[int, Optional[int]]:
+    """Issue one request against a server that truncates the first ``truncations`` bodies."""
+    sequence = _StatusSequence([200])
+    handler: Callable = type("_Handler", (_TruncatingHandler,), {"sequence": sequence, "truncations": truncations})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        session = create_session(token_provider=_StubTokenProvider())
+        try:
+            resp = session.request(method, f"http://127.0.0.1:{server.server_port}/resource")
+        except requests.exceptions.ChunkedEncodingError:
+            return sequence.count, None
+        return sequence.count, resp.status_code
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 ALWAYS_503 = [503]
 RECOVERS_ON_LAST_ATTEMPT = [503, 503, 503, 200]
 
@@ -203,6 +248,26 @@ class TestSyncRetry:
     def test_put_is_retried(self):
         attempts, _ = _sync_attempts("PUT", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
+
+    def test_get_with_truncated_body_is_retried(self):
+        attempts, status = _sync_truncated_attempts("GET", MAX_RETRIES)
+        assert attempts == TOTAL_ATTEMPTS
+        assert status == 200
+
+    def test_get_with_truncated_body_raises_when_attempts_are_exhausted(self):
+        attempts, status = _sync_truncated_attempts("GET", TOTAL_ATTEMPTS)
+        assert attempts == TOTAL_ATTEMPTS
+        assert status is None
+
+    def test_put_with_truncated_body_is_retried(self):
+        attempts, status = _sync_truncated_attempts("PUT", MAX_RETRIES)
+        assert attempts == TOTAL_ATTEMPTS
+        assert status == 200
+
+    def test_post_with_truncated_body_is_not_retried(self):
+        attempts, status = _sync_truncated_attempts("POST", 1)
+        assert attempts == 1
+        assert status is None
 
 
 async def _async_token_fetch_attempts(statuses: List[int]) -> tuple[int, bool]:
