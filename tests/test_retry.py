@@ -169,6 +169,7 @@ class _TruncatingHandler(_CountingHandler):
 
     do_GET = _respond
     do_POST = _respond
+    do_PUT = _respond
 
 
 def _sync_truncated_attempts(method: str, truncations: int) -> tuple[int, Optional[int]]:
@@ -258,8 +259,9 @@ class TestSyncRetry:
         assert attempts == TOTAL_ATTEMPTS
         assert status is None
 
-    def test_post_with_truncated_body_is_not_retried(self):
-        attempts, status = _sync_truncated_attempts("POST", 1)
+    @pytest.mark.parametrize("method", ["POST", "PUT"])
+    def test_non_safe_method_with_truncated_body_is_not_retried(self, method):
+        attempts, status = _sync_truncated_attempts(method, 1)
         assert attempts == 1
         assert status is None
 
