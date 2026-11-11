@@ -259,9 +259,13 @@ class TestSyncRetry:
         assert attempts == TOTAL_ATTEMPTS
         assert status is None
 
-    @pytest.mark.parametrize("method", ["POST", "PUT"])
-    def test_non_safe_method_with_truncated_body_is_not_retried(self, method):
-        attempts, status = _sync_truncated_attempts(method, 1)
+    def test_put_with_truncated_body_is_retried(self):
+        attempts, status = _sync_truncated_attempts("PUT", MAX_RETRIES)
+        assert attempts == TOTAL_ATTEMPTS
+        assert status == 200
+
+    def test_post_with_truncated_body_is_not_retried(self):
+        attempts, status = _sync_truncated_attempts("POST", 1)
         assert attempts == 1
         assert status is None
 

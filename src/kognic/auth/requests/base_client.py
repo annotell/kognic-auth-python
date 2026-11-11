@@ -102,7 +102,7 @@ def _monkey_patch_send(
     vanilla_send = session.send
 
     def send_with_body_retry(req, *args, **kwargs):
-        retries = MAX_RETRIES if req.method.upper() in ("GET", "HEAD") else 0
+        retries = MAX_RETRIES if req.method.upper() in RETRYABLE_METHODS else 0
         for attempt in range(retries):
             try:
                 return vanilla_send(req, *args, **kwargs)
