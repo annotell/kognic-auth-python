@@ -16,8 +16,6 @@ if TYPE_CHECKING:
 import requests
 from requests import Session
 from requests.adapters import HTTPAdapter, Retry
-from requests.exceptions import UnrewindableBodyError
-from requests.utils import rewind_body
 
 from kognic.auth import (
     DEFAULT_HOST,
@@ -32,6 +30,7 @@ from kognic.auth._user_agent import get_user_agent
 from kognic.auth.credentials_parser import ANY_AUTH_TYPE, _resolve_credentials
 from kognic.auth.env_config import DEFAULT_ENV_CONFIG_FILE_PATH, load_kognic_env_config
 from kognic.auth.internal.token_cache import TokenCache
+from kognic.auth.requests._replay import rewind_for_replay
 from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.requests.bearer_auth import KognicBearerAuth
 from kognic.auth.serde import serialize_body
@@ -82,21 +81,6 @@ def _set_session_user_agent(session: Session, client_name: Optional[str] = None)
     session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", client_name)
 
 
-def _rewind_for_retry(req: requests.PreparedRequest) -> bool:
-    """Make the body of a sent request ready to be sent again, and report whether that worked.
-
-    A stream body is rewound to where requests recorded it started. A body that cannot be
-    sent again in full, such as a generator, is never retried.
-    """
-    if req.body is None or isinstance(req.body, (bytes, str)):
-        return True
-    try:
-        rewind_body(req)
-    except (UnrewindableBodyError, ValueError):
-        return False
-    return True
-
-
 def _monkey_patch_send(
     session: Session,
     json_serializer: Callable[[Any], Any],
@@ -134,7 +118,7 @@ def _monkey_patch_send(
             try:
                 return vanilla_send(req, *args, **kwargs)
             except requests.exceptions.ChunkedEncodingError as e:
-                if not _rewind_for_retry(req):
+                if not rewind_for_replay(req):
                     raise
                 logger.warning("Cut-off response in call to %s %s, retrying: %s", req.method, req.url, e)
                 time.sleep(RETRY_BACKOFF_FACTOR * 2**attempt)
