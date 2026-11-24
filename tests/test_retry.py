@@ -11,6 +11,7 @@ would couple these tests to urllib3 internals. Sleeps are stubbed out for speed 
 from __future__ import annotations
 
 import asyncio
+import io
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -192,6 +193,63 @@ def _sync_truncated_attempts(method: str, truncations: int) -> tuple[int, Option
         thread.join(timeout=5)
 
 
+class _RecordingTruncatingHandler(_TruncatingHandler):
+    """Reads and records each request body before answering like ``_TruncatingHandler``."""
+
+    # Ends a read that waits for body bytes the client announced but never sends.
+    timeout = 1
+    received: List[bytes]
+
+    def _read_body(self) -> bytes:
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            body = b""
+            while True:
+                size = int(self.rfile.readline().split(b";")[0], 16)
+                if size == 0:
+                    while self.rfile.readline() not in (b"\r\n", b""):
+                        pass
+                    return body
+                body += self.rfile.read(size)
+                self.rfile.readline()
+        return self.rfile.read(int(self.headers.get("Content-Length", 0)))
+
+    def _respond(self):
+        self.received.append(self._read_body())
+        super()._respond()
+
+    do_PUT = _respond
+
+
+def _sync_truncated_upload(body, truncations: int) -> tuple[List[bytes], object]:
+    """PUT ``body`` to a server that truncates the first ``truncations`` responses.
+
+    Returns ``(received, outcome)``: the body the server read on each attempt, and either the
+    response status or the exception that reached the caller.
+    """
+    received: List[bytes] = []
+    handler: Callable = type(
+        "_Handler",
+        (_RecordingTruncatingHandler,),
+        {"sequence": _StatusSequence([200]), "truncations": truncations, "received": received},
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        session = create_session(token_provider=_StubTokenProvider())
+        try:
+            resp = session.put(f"http://127.0.0.1:{server.server_port}/resource", data=body, timeout=1)
+        except requests.RequestException as error:
+            return received, error
+        return received, resp.status_code
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+UPLOAD = b"0123456789" * 100
+
 ALWAYS_503 = [503]
 RECOVERS_ON_LAST_ATTEMPT = [503, 503, 503, 200]
 
@@ -268,6 +326,48 @@ class TestSyncRetry:
         attempts, status = _sync_truncated_attempts("POST", 1)
         assert attempts == 1
         assert status is None
+
+
+class TestSyncCutOffRetryRequestBody:
+    """A cut-off retry only sends a replayable body again, and always sends all of it."""
+
+    def test_generator_body_is_not_retried(self):
+        def chunks():
+            yield UPLOAD[:500]
+            yield UPLOAD[500:]
+
+        received, outcome = _sync_truncated_upload(chunks(), truncations=1)
+        assert received == [UPLOAD]
+        assert isinstance(outcome, requests.exceptions.ChunkedEncodingError)
+
+    def test_stream_body_is_sent_in_full_on_retry(self):
+        received, outcome = _sync_truncated_upload(io.BytesIO(UPLOAD), truncations=1)
+        assert received == [UPLOAD, UPLOAD]
+        assert outcome == 200
+
+    def test_stream_body_is_resent_from_where_the_upload_started(self):
+        stream = io.BytesIO(b"skipped" + UPLOAD)
+        stream.seek(len(b"skipped"))
+        received, outcome = _sync_truncated_upload(stream, truncations=1)
+        assert received == [UPLOAD, UPLOAD]
+        assert outcome == 200
+
+    def test_bytes_body_is_sent_in_full_on_retry(self):
+        received, outcome = _sync_truncated_upload(UPLOAD, truncations=1)
+        assert received == [UPLOAD, UPLOAD]
+        assert outcome == 200
+
+    def test_stream_that_cannot_be_rewound_is_not_retried(self):
+        class _ClosesOnceRead(io.BytesIO):
+            def read(self, *args):
+                data = super().read(*args)
+                if not data:
+                    self.close()
+                return data
+
+        received, outcome = _sync_truncated_upload(_ClosesOnceRead(UPLOAD), truncations=1)
+        assert received == [UPLOAD]
+        assert isinstance(outcome, requests.exceptions.ChunkedEncodingError)
 
 
 async def _async_token_fetch_attempts(statuses: List[int]) -> tuple[int, bool]:

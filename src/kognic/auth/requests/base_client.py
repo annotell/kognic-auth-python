@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 import requests
 from requests import Session
 from requests.adapters import HTTPAdapter, Retry
+from requests.exceptions import UnrewindableBodyError
+from requests.utils import rewind_body
 
 from kognic.auth import (
     DEFAULT_HOST,
@@ -73,6 +75,21 @@ def _set_session_user_agent(session: Session, client_name: Optional[str] = None)
     session.headers["User-Agent"] = get_user_agent(f"requests/{requests.__version__}", client_name)
 
 
+def _rewind_for_retry(req: requests.PreparedRequest) -> bool:
+    """Make the body of a sent request ready to be sent again, and report whether that worked.
+
+    A stream body is rewound to where requests recorded it started. A body that cannot be
+    sent again in full, such as a generator, is never retried.
+    """
+    if req.body is None or isinstance(req.body, (bytes, str)):
+        return True
+    try:
+        rewind_body(req)
+    except (UnrewindableBodyError, ValueError):
+        return False
+    return True
+
+
 def _monkey_patch_send(
     session: Session,
     json_serializer: Callable[[Any], Any],
@@ -107,6 +124,8 @@ def _monkey_patch_send(
             try:
                 return vanilla_send(req, *args, **kwargs)
             except requests.exceptions.ChunkedEncodingError as e:
+                if not _rewind_for_retry(req):
+                    raise
                 logger.warning("Response body from %s %s was cut off, retrying: %s", req.method, req.url, e)
                 time.sleep(RETRY_BACKOFF_FACTOR * 2**attempt)
         return vanilla_send(req, *args, **kwargs)
