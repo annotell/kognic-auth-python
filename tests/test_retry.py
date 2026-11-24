@@ -4,20 +4,26 @@ Both clients retry transient 5xx responses for idempotent methods only. Methods 
 ``RETRYABLE_METHODS`` — POST and PATCH — surface the first failure to the caller, so a
 request that may have taken effect server-side is never replayed without the caller asking.
 
-The sync client also has a cut-off retry: a cut-off response to an idempotent method is
-retried, up to the same number of attempts. Only a replayable body is sent again, and only the
-outermost send of a call retries, replaying the whole request from the original URL so that a
-redirect is followed again. ``stream=True`` responses are not covered, since the body is read
-after the call returns.
+Both clients also have a cut-off retry: a cut-off response to an idempotent method is retried,
+up to the same number of attempts. Only a replayable body is sent again, and only the outermost
+call retries, replaying the whole request. In the sync client that is the outermost send, which
+follows a redirect again; ``stream=True`` responses are not covered, since the body is read after
+the call returns. In the async client it is the outermost request call, so a token refresh inside
+an API call is replayed with it, and the token request is retried too. The async client gives no
+retry at all to a body that is not replayable, and its status and cut-off retries share one budget.
 
-Timing is deliberately not asserted here: the sync backoff belongs to urllib3 and pinning it
-would couple these tests to urllib3 internals. Sleeps are stubbed out for speed only.
+The cut-off tests run against a real local server, so they prove which exception the HTTP
+library raises. Timing is only asserted through the shared backoff function: the sync status
+backoff belongs to urllib3 and pinning it would couple these tests to urllib3 internals. Sleeps
+are stubbed out for speed only.
 """
 
 from __future__ import annotations
 
 import asyncio
 import io
+import socket
+import struct
 import threading
 import time
 from contextlib import contextmanager
@@ -29,7 +35,7 @@ import pytest
 import requests
 import urllib3.util.retry
 
-from kognic.auth import MAX_RETRIES, RETRYABLE_METHODS
+from kognic.auth import DEFAULT_TOKEN_ENDPOINT_RELPATH, MAX_RETRIES, RETRYABLE_METHODS, retry_delay
 from kognic.auth.httpx.base_client import BaseAsyncApiClient
 from kognic.auth.requests.auth_session import RequestsAuthSession
 from kognic.auth.requests.base_client import DEFAULT_RETRY, create_session
@@ -200,6 +206,21 @@ def _sync_cut_off_attempts(method: str, cut_offs: int) -> tuple[int, Optional[in
         thread.join(timeout=5)
 
 
+def _read_request_body(handler: BaseHTTPRequestHandler) -> bytes:
+    """Read the whole request body, chunked or sized by Content-Length."""
+    if handler.headers.get("Transfer-Encoding", "").lower() == "chunked":
+        body = b""
+        while True:
+            size = int(handler.rfile.readline().split(b";")[0], 16)
+            if size == 0:
+                while handler.rfile.readline() not in (b"\r\n", b""):
+                    pass
+                return body
+            body += handler.rfile.read(size)
+            handler.rfile.readline()
+    return handler.rfile.read(int(handler.headers.get("Content-Length", 0)))
+
+
 class _RecordingCuttingOffHandler(_CuttingOffHandler):
     """Reads and records each request body before answering like ``_CuttingOffHandler``."""
 
@@ -207,21 +228,8 @@ class _RecordingCuttingOffHandler(_CuttingOffHandler):
     timeout = 1
     received: List[bytes]
 
-    def _read_body(self) -> bytes:
-        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
-            body = b""
-            while True:
-                size = int(self.rfile.readline().split(b";")[0], 16)
-                if size == 0:
-                    while self.rfile.readline() not in (b"\r\n", b""):
-                        pass
-                    return body
-                body += self.rfile.read(size)
-                self.rfile.readline()
-        return self.rfile.read(int(self.headers.get("Content-Length", 0)))
-
     def _respond(self):
-        self.received.append(self._read_body())
+        self.received.append(_read_request_body(self))
         super()._respond()
 
     do_PUT = _respond
@@ -381,8 +389,8 @@ SUNSET_DATE = "2099-01-01T00:00:00Z"
 
 
 class _RoutingHandler(BaseHTTPRequestHandler):
-    """Answers each path with the next reply from its route, repeating the last one, and counts
-    the hits on every path.
+    """Answers each path with the next reply from its route, repeating the last one, counts
+    the hits on every path and records the request body of every hit.
 
     A reply is a callable that writes the whole response, so it can also cut the response off.
     """
@@ -391,8 +399,10 @@ class _RoutingHandler(BaseHTTPRequestHandler):
     timeout = 1
     routes: Dict[str, List[Callable[["_RoutingHandler"], None]]]
     hits: Dict[str, int]
+    received: Dict[str, List[bytes]]
 
     def _respond(self):
+        self.received.setdefault(self.path, []).append(_read_request_body(self))
         hit = self.hits.get(self.path, 0)
         self.hits[self.path] = hit + 1
         replies = self.routes[self.path]
@@ -457,11 +467,52 @@ def _chunked_cut_off(handler: _RoutingHandler):
     handler.close_connection = True
 
 
+def _reset(handler: _RoutingHandler):
+    """Sends the headers and part of the body, then resets the connection.
+
+    A zero linger makes close send RST instead of FIN. The socket is closed here because the
+    server's own teardown shuts down the write side first, which would send a FIN.
+    """
+    body = b'{"message": "complete"}'
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body[:5])
+    # Give the client time to read what was sent, so the reset lands while it waits for the rest.
+    threading.Event().wait(0.05)
+    handler.connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+    handler.connection.close()
+    handler.close_connection = True
+
+
+TOKEN_PATH = DEFAULT_TOKEN_ENDPOINT_RELPATH
+
+
+def _token() -> Callable[[_RoutingHandler], None]:
+    def reply(handler: _RoutingHandler):
+        body = b'{"access_token": "granted", "token_type": "Bearer", "expires_in": 3600}'
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+
+    return reply
+
+
 @contextmanager
-def _routing_server(routes: Dict[str, List[Callable[[_RoutingHandler], None]]]) -> Iterator[tuple[str, Dict[str, int]]]:
-    """Serve ``routes`` on a local server, yielding its base URL and the hits per path."""
+def _routing_server(
+    routes: Dict[str, List[Callable[[_RoutingHandler], None]]],
+    received: Optional[Dict[str, List[bytes]]] = None,
+) -> Iterator[tuple[str, Dict[str, int]]]:
+    """Serve ``routes`` on a local server, yielding its base URL and the hits per path.
+
+    The request body the server read on each hit is recorded per path in ``received``, if given.
+    """
     hits: Dict[str, int] = {}
-    handler: Callable = type("_Handler", (_RoutingHandler,), {"routes": routes, "hits": hits})
+    attrs = {"routes": routes, "hits": hits, "received": {} if received is None else received}
+    handler: Callable = type("_Handler", (_RoutingHandler,), attrs)
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -559,6 +610,123 @@ class TestSyncCutOffRetryResponseShapes:
                 session.delete(f"{base}/resource", timeout=1)
         assert error.value.response.status_code == 404
         assert hits == {"/resource": 2}
+
+
+def _async_local_client(base: str, expires_at: int = _NEVER_EXPIRES) -> BaseAsyncApiClient:
+    """Build an async client that sends its API calls and token requests to the server at ``base``.
+
+    It starts with a token that expires at ``expires_at``, so no token request is made before then.
+    """
+    client = BaseAsyncApiClient(auth=("client-id", "client-secret"), auth_host=base, timeout=1)
+    client._oauth_client.token = {"access_token": "access-token", "token_type": "Bearer", "expires_at": expires_at}
+    return client
+
+
+class TestAsyncCutOffRetry:
+    """The async client retries a cut-off response under the same rules as the sync client.
+
+    Status retries and cut-off retries share one budget, so a call makes at most 4 attempts.
+    """
+
+    async def test_get_with_chunked_response_cut_off_until_the_last_attempt_returns_the_success(self):
+        routes = {"/resource": [_chunked_cut_off] * MAX_RETRIES + [_complete()]}
+        with _routing_server(routes) as (base, hits):
+            async with _async_local_client(base) as client:
+                session = await client.session
+                resp = await session.get(f"{base}/resource")
+        assert resp.status_code == 200
+        assert resp.json() == {"message": "complete"}
+        assert hits == {"/resource": TOTAL_ATTEMPTS}
+
+    async def test_get_with_response_always_cut_off_raises_the_original_error(self):
+        routes = {"/resource": [_cut_off]}
+        with _routing_server(routes) as (base, hits):
+            async with _async_local_client(base) as client:
+                session = await client.session
+                with pytest.raises(httpx.RemoteProtocolError):
+                    await session.get(f"{base}/resource")
+        assert hits == {"/resource": TOTAL_ATTEMPTS}
+
+    async def test_get_with_connection_reset_mid_body_raises_read_error_when_attempts_are_exhausted(self):
+        routes = {"/resource": [_reset]}
+        with _routing_server(routes) as (base, hits):
+            async with _async_local_client(base) as client:
+                session = await client.session
+                with pytest.raises(httpx.ReadError):
+                    await session.get(f"{base}/resource")
+        assert hits == {"/resource": TOTAL_ATTEMPTS}
+
+    async def test_post_with_cut_off_response_is_not_retried(self):
+        routes = {"/resource": [_cut_off, _complete()]}
+        with _routing_server(routes) as (base, hits):
+            async with _async_local_client(base) as client:
+                session = await client.session
+                with pytest.raises(httpx.RemoteProtocolError):
+                    await session.post(f"{base}/resource", json={"name": "test"})
+        assert hits == {"/resource": 1}
+
+    async def test_delete_answered_with_404_after_a_retry_raises_the_404(self):
+        routes = {"/resource": [_cut_off, _complete(status=404)]}
+        with _routing_server(routes) as (base, hits):
+            async with _async_local_client(base) as client:
+                session = await client.session
+                with pytest.raises(httpx.HTTPStatusError) as error:
+                    await session.delete(f"{base}/resource")
+        assert error.value.response.status_code == 404
+        assert hits == {"/resource": 2}
+
+    async def test_cut_off_token_response_is_retried(self):
+        routes = {TOKEN_PATH: [_cut_off, _token()]}
+        with _routing_server(routes) as (base, hits):
+            async with BaseAsyncApiClient(auth=("client-id", "client-secret"), auth_host=base, timeout=1) as client:
+                await client.session
+                assert client.token["access_token"] == "granted"
+        assert hits == {TOKEN_PATH: 2}
+
+    async def test_cut_off_token_refresh_inside_an_api_call_is_retried_once_per_call(self):
+        routes = {TOKEN_PATH: [_cut_off], "/resource": [_complete()]}
+        with _routing_server(routes) as (base, hits):
+            async with _async_local_client(base, expires_at=1) as client:
+                session = await client.session
+                with pytest.raises(httpx.RemoteProtocolError):
+                    await session.get(f"{base}/resource")
+        assert hits == {TOKEN_PATH: TOTAL_ATTEMPTS}
+
+
+class TestAsyncRetryRequestBody:
+    """Only a replayable body is sent again, by a status retry or a cut-off retry."""
+
+    async def test_async_generator_body_that_gets_a_503_is_not_retried(self):
+        async def chunks():
+            yield UPLOAD[:500]
+            yield UPLOAD[500:]
+
+        received: Dict[str, List[bytes]] = {}
+        routes = {"/resource": [_complete(status=503), _complete()]}
+        with _routing_server(routes, received) as (base, hits):
+            async with _async_local_client(base) as client:
+                session = await client.session
+                with pytest.raises(httpx.HTTPStatusError) as error:
+                    await session.put(f"{base}/resource", content=chunks())
+        assert error.value.response.status_code == 503
+        assert hits == {"/resource": 1}
+        assert received == {"/resource": [UPLOAD]}
+
+    async def test_bytes_body_is_sent_in_full_on_a_status_retry(self):
+        received: Dict[str, List[bytes]] = {}
+        routes = {"/resource": [_complete(status=503), _complete()]}
+        with _routing_server(routes, received) as (base, hits):
+            async with _async_local_client(base) as client:
+                session = await client.session
+                resp = await session.put(f"{base}/resource", content=UPLOAD)
+        assert resp.status_code == 200
+        assert hits == {"/resource": 2}
+        assert received == {"/resource": [UPLOAD, UPLOAD]}
+
+
+class TestRetryDelay:
+    def test_first_retry_is_immediate_then_the_delay_doubles(self):
+        assert [retry_delay(n) for n in (1, 2, 3)] == [0.0, 1.0, 2.0]
 
 
 async def _async_token_fetch_attempts(statuses: List[int]) -> tuple[int, bool]:
