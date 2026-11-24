@@ -52,7 +52,14 @@ _DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
 
 
 def _check_response(resp: requests.Response, sunset_handler: Optional[SunsetHandler] = _DEFAULT_SUNSET_HANDLER):
-    """Handle sunset headers and raise for status with enhanced error messages."""
+    """Handle sunset headers and raise for status with enhanced error messages.
+
+    The sunset handler sees every redirect response that led to ``resp``, then ``resp`` itself.
+    Only ``resp`` is raised for, since a redirect response is not an error.
+    """
+    for redirect in resp.history:
+        if redirect.is_redirect:
+            handle_sunset(redirect, sunset_handler)
     handle_sunset(resp, sunset_handler)
     try:
         resp.raise_for_status()
@@ -117,8 +124,11 @@ def _monkey_patch_send(
 
     # Monkey patch to always raise for status and handle errors
     vanilla_send = session.send
+    # requests follows a redirect by calling session.send again. Those nested calls pass straight
+    # through, so only the outermost call of each thread retries and checks the responses.
+    in_call = threading.local()
 
-    def send_with_body_retry(req, *args, **kwargs):
+    def send_with_cut_off_retry(req, *args, **kwargs):
         retries = MAX_RETRIES if req.method.upper() in RETRYABLE_METHODS else 0
         for attempt in range(retries):
             try:
@@ -126,12 +136,18 @@ def _monkey_patch_send(
             except requests.exceptions.ChunkedEncodingError as e:
                 if not _rewind_for_retry(req):
                     raise
-                logger.warning("Response body from %s %s was cut off, retrying: %s", req.method, req.url, e)
+                logger.warning("Cut-off response in call to %s %s, retrying: %s", req.method, req.url, e)
                 time.sleep(RETRY_BACKOFF_FACTOR * 2**attempt)
         return vanilla_send(req, *args, **kwargs)
 
     def send_request(req, *args, **kwargs):
-        resp = send_with_body_retry(req, *args, **kwargs)
+        if getattr(in_call, "active", False):
+            return vanilla_send(req, *args, **kwargs)
+        in_call.active = True
+        try:
+            resp = send_with_cut_off_retry(req, *args, **kwargs)
+        finally:
+            in_call.active = False
         _check_response(resp, sunset_handler)
         return resp
 
@@ -156,7 +172,8 @@ def create_session(
     - OAuth2 authentication with automatic token refresh
     - Automatic JSON serialization for jsonable objects
     - Default retry logic for transient errors, on idempotent methods only
-    - Sunset header handling
+    - Cut-off retry: a cut-off response to an idempotent method is retried. See BaseApiClient.
+    - Sunset header handling, for every response of a call including redirects
     - Always call raise_for_status with enhanced error messages
 
     Args:
@@ -281,7 +298,13 @@ class BaseApiClient:
     - Automatic JSON serialization
     - Retry logic for transient errors (502, 503, 504) on idempotent methods only; POST and
       PATCH surface the first failure so the caller decides whether repeating is safe
-    - Sunset header handling
+    - Cut-off retry: a response whose connection closes before the body is complete
+      (``ChunkedEncodingError``) is retried for idempotent methods, for up to 4 attempts.
+      The whole request is replayed from the original URL, following any redirect again.
+      Only a replayable body is sent again: none, bytes, str, or a stream that can be rewound.
+      Otherwise the original error is raised. ``stream=True`` responses are not covered, since
+      their body is read after the call returns.
+    - Sunset header handling, for every response of a call including redirects
     - Enhanced error messages
 
     Clients with the same credentials and auth host automatically share a token provider,

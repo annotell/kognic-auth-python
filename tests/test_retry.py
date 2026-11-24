@@ -4,6 +4,12 @@ Both clients retry transient 5xx responses for idempotent methods only. Methods 
 ``RETRYABLE_METHODS`` — POST and PATCH — surface the first failure to the caller, so a
 request that may have taken effect server-side is never replayed without the caller asking.
 
+The sync client also has a cut-off retry: a cut-off response to an idempotent method is
+retried, up to the same number of attempts. Only a replayable body is sent again, and only the
+outermost send of a call retries, replaying the whole request from the original URL so that a
+redirect is followed again. ``stream=True`` responses are not covered, since the body is read
+after the call returns.
+
 Timing is deliberately not asserted here: the sync backoff belongs to urllib3 and pinning it
 would couple these tests to urllib3 internals. Sleeps are stubbed out for speed only.
 """
@@ -14,8 +20,9 @@ import asyncio
 import io
 import threading
 import time
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable, List, Optional
+from typing import Callable, Dict, Iterator, List, Optional
 
 import httpx
 import pytest
@@ -150,22 +157,22 @@ def _sync_attempts(method: str, statuses: List[int]) -> tuple[int, Optional[int]
         thread.join(timeout=5)
 
 
-class _TruncatingHandler(_CountingHandler):
+class _CuttingOffHandler(_CountingHandler):
     """Sends headers announcing a full body, then cuts the connection mid-body for the first
-    ``truncations`` requests, like a peer resetting the connection while streaming a response."""
+    ``cut_offs`` requests, like a peer resetting the connection while streaming a response."""
 
-    truncations: int
+    cut_offs: int
 
     def _respond(self):
         self.sequence.next_status()
         body = b'{"message": "complete"}'
-        truncate = self.sequence.count <= self.truncations
+        cut_off = self.sequence.count <= self.cut_offs
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Connection", "close")
         self.end_headers()
-        self.wfile.write(body[:5] if truncate else body)
+        self.wfile.write(body[:5] if cut_off else body)
         self.close_connection = True
 
     do_GET = _respond
@@ -173,10 +180,10 @@ class _TruncatingHandler(_CountingHandler):
     do_PUT = _respond
 
 
-def _sync_truncated_attempts(method: str, truncations: int) -> tuple[int, Optional[int]]:
-    """Issue one request against a server that truncates the first ``truncations`` bodies."""
+def _sync_cut_off_attempts(method: str, cut_offs: int) -> tuple[int, Optional[int]]:
+    """Issue one request against a server that cuts off the first ``cut_offs`` responses."""
     sequence = _StatusSequence([200])
-    handler: Callable = type("_Handler", (_TruncatingHandler,), {"sequence": sequence, "truncations": truncations})
+    handler: Callable = type("_Handler", (_CuttingOffHandler,), {"sequence": sequence, "cut_offs": cut_offs})
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -193,8 +200,8 @@ def _sync_truncated_attempts(method: str, truncations: int) -> tuple[int, Option
         thread.join(timeout=5)
 
 
-class _RecordingTruncatingHandler(_TruncatingHandler):
-    """Reads and records each request body before answering like ``_TruncatingHandler``."""
+class _RecordingCuttingOffHandler(_CuttingOffHandler):
+    """Reads and records each request body before answering like ``_CuttingOffHandler``."""
 
     # Ends a read that waits for body bytes the client announced but never sends.
     timeout = 1
@@ -220,8 +227,8 @@ class _RecordingTruncatingHandler(_TruncatingHandler):
     do_PUT = _respond
 
 
-def _sync_truncated_upload(body, truncations: int) -> tuple[List[bytes], object]:
-    """PUT ``body`` to a server that truncates the first ``truncations`` responses.
+def _sync_cut_off_upload(body, cut_offs: int) -> tuple[List[bytes], object]:
+    """PUT ``body`` to a server that cuts off the first ``cut_offs`` responses.
 
     Returns ``(received, outcome)``: the body the server read on each attempt, and either the
     response status or the exception that reached the caller.
@@ -229,8 +236,8 @@ def _sync_truncated_upload(body, truncations: int) -> tuple[List[bytes], object]
     received: List[bytes] = []
     handler: Callable = type(
         "_Handler",
-        (_RecordingTruncatingHandler,),
-        {"sequence": _StatusSequence([200]), "truncations": truncations, "received": received},
+        (_RecordingCuttingOffHandler,),
+        {"sequence": _StatusSequence([200]), "cut_offs": cut_offs, "received": received},
     )
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -307,23 +314,23 @@ class TestSyncRetry:
         attempts, _ = _sync_attempts("PUT", ALWAYS_503)
         assert attempts == TOTAL_ATTEMPTS
 
-    def test_get_with_truncated_body_is_retried(self):
-        attempts, status = _sync_truncated_attempts("GET", MAX_RETRIES)
+    def test_get_with_cut_off_response_is_retried(self):
+        attempts, status = _sync_cut_off_attempts("GET", MAX_RETRIES)
         assert attempts == TOTAL_ATTEMPTS
         assert status == 200
 
-    def test_get_with_truncated_body_raises_when_attempts_are_exhausted(self):
-        attempts, status = _sync_truncated_attempts("GET", TOTAL_ATTEMPTS)
+    def test_get_with_cut_off_response_raises_when_attempts_are_exhausted(self):
+        attempts, status = _sync_cut_off_attempts("GET", TOTAL_ATTEMPTS)
         assert attempts == TOTAL_ATTEMPTS
         assert status is None
 
-    def test_put_with_truncated_body_is_retried(self):
-        attempts, status = _sync_truncated_attempts("PUT", MAX_RETRIES)
+    def test_put_with_cut_off_response_is_retried(self):
+        attempts, status = _sync_cut_off_attempts("PUT", MAX_RETRIES)
         assert attempts == TOTAL_ATTEMPTS
         assert status == 200
 
-    def test_post_with_truncated_body_is_not_retried(self):
-        attempts, status = _sync_truncated_attempts("POST", 1)
+    def test_post_with_cut_off_response_is_not_retried(self):
+        attempts, status = _sync_cut_off_attempts("POST", 1)
         assert attempts == 1
         assert status is None
 
@@ -336,24 +343,24 @@ class TestSyncCutOffRetryRequestBody:
             yield UPLOAD[:500]
             yield UPLOAD[500:]
 
-        received, outcome = _sync_truncated_upload(chunks(), truncations=1)
+        received, outcome = _sync_cut_off_upload(chunks(), cut_offs=1)
         assert received == [UPLOAD]
         assert isinstance(outcome, requests.exceptions.ChunkedEncodingError)
 
     def test_stream_body_is_sent_in_full_on_retry(self):
-        received, outcome = _sync_truncated_upload(io.BytesIO(UPLOAD), truncations=1)
+        received, outcome = _sync_cut_off_upload(io.BytesIO(UPLOAD), cut_offs=1)
         assert received == [UPLOAD, UPLOAD]
         assert outcome == 200
 
     def test_stream_body_is_resent_from_where_the_upload_started(self):
         stream = io.BytesIO(b"skipped" + UPLOAD)
         stream.seek(len(b"skipped"))
-        received, outcome = _sync_truncated_upload(stream, truncations=1)
+        received, outcome = _sync_cut_off_upload(stream, cut_offs=1)
         assert received == [UPLOAD, UPLOAD]
         assert outcome == 200
 
     def test_bytes_body_is_sent_in_full_on_retry(self):
-        received, outcome = _sync_truncated_upload(UPLOAD, truncations=1)
+        received, outcome = _sync_cut_off_upload(UPLOAD, cut_offs=1)
         assert received == [UPLOAD, UPLOAD]
         assert outcome == 200
 
@@ -365,9 +372,193 @@ class TestSyncCutOffRetryRequestBody:
                     self.close()
                 return data
 
-        received, outcome = _sync_truncated_upload(_ClosesOnceRead(UPLOAD), truncations=1)
+        received, outcome = _sync_cut_off_upload(_ClosesOnceRead(UPLOAD), cut_offs=1)
         assert received == [UPLOAD]
         assert isinstance(outcome, requests.exceptions.ChunkedEncodingError)
+
+
+SUNSET_DATE = "2099-01-01T00:00:00Z"
+
+
+class _RoutingHandler(BaseHTTPRequestHandler):
+    """Answers each path with the next reply from its route, repeating the last one, and counts
+    the hits on every path.
+
+    A reply is a callable that writes the whole response, so it can also cut the response off.
+    """
+
+    protocol_version = "HTTP/1.1"
+    timeout = 1
+    routes: Dict[str, List[Callable[["_RoutingHandler"], None]]]
+    hits: Dict[str, int]
+
+    def _respond(self):
+        hit = self.hits.get(self.path, 0)
+        self.hits[self.path] = hit + 1
+        replies = self.routes[self.path]
+        replies[min(hit, len(replies) - 1)](self)
+
+    do_GET = _respond
+    do_POST = _respond
+    do_PUT = _respond
+    do_DELETE = _respond
+
+    def log_message(self, format, *args):  # noqa: A002
+        """Silence per-request stderr logging so test output stays pristine."""
+
+
+def _complete(status: int = 200, sunset: Optional[str] = None) -> Callable[[_RoutingHandler], None]:
+    def reply(handler: _RoutingHandler):
+        body = b'{"message": "complete"}'
+        handler.send_response(status)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Content-Length", str(len(body)))
+        if sunset:
+            handler.send_header("sunset-date", sunset)
+        handler.end_headers()
+        handler.wfile.write(body)
+
+    return reply
+
+
+def _redirect(location: str, status: int = 302, sunset: Optional[str] = None) -> Callable[[_RoutingHandler], None]:
+    def reply(handler: _RoutingHandler):
+        handler.send_response(status)
+        handler.send_header("Location", location)
+        handler.send_header("Content-Length", "0")
+        if sunset:
+            handler.send_header("sunset-date", sunset)
+        handler.end_headers()
+
+    return reply
+
+
+def _cut_off(handler: _RoutingHandler):
+    """Announces a full body in Content-Length, then closes the connection after part of it."""
+    body = b'{"message": "complete"}'
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Connection", "close")
+    handler.end_headers()
+    handler.wfile.write(body[:5])
+    handler.close_connection = True
+
+
+def _chunked_cut_off(handler: _RoutingHandler):
+    """Sends one chunk of a chunked body, then closes the connection before the terminating
+    chunk, like the production incident behind the cut-off retry."""
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Transfer-Encoding", "chunked")
+    handler.send_header("Connection", "close")
+    handler.end_headers()
+    handler.wfile.write(b'5\r\n{"mes\r\n')
+    handler.close_connection = True
+
+
+@contextmanager
+def _routing_server(routes: Dict[str, List[Callable[[_RoutingHandler], None]]]) -> Iterator[tuple[str, Dict[str, int]]]:
+    """Serve ``routes`` on a local server, yielding its base URL and the hits per path."""
+    hits: Dict[str, int] = {}
+    handler: Callable = type("_Handler", (_RoutingHandler,), {"routes": routes, "hits": hits})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", hits
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+class TestSyncCutOffRetryOncePerCall:
+    """Only the outermost send of a call retries a cut-off response and checks the responses.
+
+    A retry replays the whole request from the original URL, so a redirect is followed again.
+    """
+
+    def test_redirect_to_a_cut_off_response_makes_four_attempts_on_each_url(self):
+        routes = {"/start": [_redirect("/target")], "/target": [_cut_off]}
+        with _routing_server(routes) as (base, hits):
+            session = create_session(token_provider=_StubTokenProvider())
+            with pytest.raises(requests.exceptions.ChunkedEncodingError):
+                session.get(f"{base}/start", timeout=1)
+        assert hits == {"/start": TOTAL_ATTEMPTS, "/target": TOTAL_ATTEMPTS}
+
+    def test_sunset_handler_sees_each_response_of_a_redirect_once(self):
+        seen: List[tuple[str, str]] = []
+        routes = {"/start": [_redirect("/target", sunset=SUNSET_DATE)], "/target": [_complete(sunset=SUNSET_DATE)]}
+        with _routing_server(routes) as (base, _):
+            session = create_session(
+                token_provider=_StubTokenProvider(),
+                sunset_handler=lambda _date, method, url: seen.append((method, url)),
+            )
+            session.get(f"{base}/start", timeout=1)
+        assert seen == [("GET", f"{base}/start"), ("GET", f"{base}/target")]
+
+    def test_redirect_to_an_error_raises_one_enhanced_http_error(self):
+        routes = {"/start": [_redirect("/target")], "/target": [_complete(status=404)]}
+        with _routing_server(routes) as (base, hits):
+            session = create_session(token_provider=_StubTokenProvider())
+            with pytest.raises(requests.HTTPError) as error:
+                session.get(f"{base}/start", timeout=1)
+        assert error.value.response.status_code == 404
+        assert "Got HttpError with status=404" in str(error.value)
+        assert hits == {"/start": 1, "/target": 1}
+
+    def test_post_redirected_to_a_cut_off_get_is_not_retried(self):
+        routes = {"/start": [_redirect("/target", status=303)], "/target": [_cut_off]}
+        with _routing_server(routes) as (base, hits):
+            session = create_session(token_provider=_StubTokenProvider())
+            with pytest.raises(requests.exceptions.ChunkedEncodingError):
+                session.post(f"{base}/start", timeout=1)
+        assert hits == {"/start": 1, "/target": 1}
+
+    def test_another_session_used_inside_a_response_hook_still_retries(self):
+        routes = {"/outer": [_complete()], "/inner": [_cut_off, _complete()]}
+        with _routing_server(routes) as (base, hits):
+            outer = create_session(token_provider=_StubTokenProvider())
+            inner = create_session(token_provider=_StubTokenProvider())
+            inner_statuses: List[int] = []
+
+            def call_inner(resp, **_kwargs):
+                inner_statuses.append(inner.get(f"{base}/inner", timeout=1).status_code)
+                return resp
+
+            outer.get(f"{base}/outer", hooks={"response": call_inner}, timeout=1)
+        assert inner_statuses == [200]
+        assert hits == {"/outer": 1, "/inner": 2}
+
+
+class TestSyncCutOffRetryResponseShapes:
+    def test_chunked_response_cut_off_before_its_terminator_is_retried(self):
+        routes = {"/resource": [_chunked_cut_off, _complete()]}
+        with _routing_server(routes) as (base, hits):
+            session = create_session(token_provider=_StubTokenProvider())
+            resp = session.get(f"{base}/resource", timeout=1)
+        assert resp.status_code == 200
+        assert resp.json() == {"message": "complete"}
+        assert hits == {"/resource": 2}
+
+    def test_streamed_response_is_not_retried_and_raises_when_read(self):
+        routes = {"/resource": [_cut_off, _complete()]}
+        with _routing_server(routes) as (base, hits):
+            session = create_session(token_provider=_StubTokenProvider())
+            resp = session.get(f"{base}/resource", stream=True, timeout=1)
+            with resp, pytest.raises(requests.exceptions.ChunkedEncodingError):
+                _ = resp.content
+        assert hits == {"/resource": 1}
+
+    def test_delete_answered_with_404_after_a_retry_raises_the_404(self):
+        routes = {"/resource": [_cut_off, _complete(status=404)]}
+        with _routing_server(routes) as (base, hits):
+            session = create_session(token_provider=_StubTokenProvider())
+            with pytest.raises(requests.HTTPError) as error:
+                session.delete(f"{base}/resource", timeout=1)
+        assert error.value.response.status_code == 404
+        assert hits == {"/resource": 2}
 
 
 async def _async_token_fetch_attempts(statuses: List[int]) -> tuple[int, bool]:

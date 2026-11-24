@@ -474,17 +474,20 @@ dependencies = [
 cli = [
     { name = "keyring" },
     { name = "requests" },
+    { name = "urllib3" },
 ]
 full = [
     { name = "httpx" },
     { name = "keyring" },
     { name = "requests" },
+    { name = "urllib3" },
 ]
 httpx = [
     { name = "httpx" },
 ]
 requests = [
     { name = "requests" },
+    { name = "urllib3" },
 ]
 
 [package.dev-dependencies]
@@ -506,6 +509,9 @@ requires-dist = [
     { name = "requests", marker = "extra == 'cli'", specifier = ">=2.33,<3" },
     { name = "requests", marker = "extra == 'full'", specifier = ">=2.33,<3" },
     { name = "requests", marker = "extra == 'requests'", specifier = ">=2.33,<3" },
+    { name = "urllib3", marker = "extra == 'cli'", specifier = ">=2" },
+    { name = "urllib3", marker = "extra == 'full'", specifier = ">=2" },
+    { name = "urllib3", marker = "extra == 'requests'", specifier = ">=2" },
 ]
 provides-extras = ["httpx", "requests", "cli", "full"]
 
