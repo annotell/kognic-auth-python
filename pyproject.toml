@@ -46,17 +46,20 @@ httpx = [
     "httpx>=0.20,<1"
 ]
 requests = [
-    "requests>=2.33,<3"
+    "requests>=2.33,<3",
+    "urllib3>=2"
 ]
 
 cli = [
     "keyring>=23.0",
-    "requests>=2.33,<3"
+    "requests>=2.33,<3",
+    "urllib3>=2"
 ]
 
 full = [
     "httpx>=0.20,<1",
     "requests>=2.33,<3",
+    "urllib3>=2",
     "keyring>=23.0"
 ]
 

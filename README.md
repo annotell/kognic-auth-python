@@ -299,6 +299,32 @@ These provide a `requests`/`httpx`-compatible interface with enhancements:
 - Sunset header handling (logs warnings for deprecated endpoints)
 - Enhanced error messages with response body details
 
+### Retries
+
+Both clients retry 502, 503 and 504 responses for `HEAD`, `GET`, `PUT`, `DELETE`, `OPTIONS`
+and `TRACE`, for up to 4 attempts per call.
+
+The sync client also has a **cut-off retry**. A cut-off response is one whose connection closes
+after the headers arrived and before the body was complete (`requests.exceptions.ChunkedEncodingError`).
+For the same methods, the sync client retries it for up to 4 attempts, waiting 0.5s, 1s and 2s
+between them:
+
+- The whole request is replayed from the original URL, so a redirect is followed again and a
+  signed URL is fetched fresh on each attempt. The method you called decides whether it is
+  retried: a `POST` redirected to a `GET` is not.
+- Only a replayable body is sent again: no body, `bytes`, `str`, or a file-like stream that can
+  be rewound to where it started. With any other body, such as a generator, the original error
+  is raised.
+- With `stream=True` the body is read after the call returns, so a cut-off response is not
+  retried. The error is raised when you read the body.
+- A `PUT` or `DELETE` that is retried may already have taken effect. A retried `DELETE` that
+  gets a 404 raises the 404; handle it if your first attempt may have deleted the resource.
+
+**Worst case:** the cut-off retry and the 5xx retry count their attempts separately. When 5xx
+responses and cut-off responses alternate, one call to one URL can make up to 16 attempts, with
+about 15.5s of backoff (more if the server sends `Retry-After`) on top of each attempt's own
+timeout.
+
 ### Sync Client (requests)
 
 ```python
