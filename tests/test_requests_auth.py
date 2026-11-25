@@ -1,6 +1,11 @@
 """Tests for requests-layer token refresh and 401 retry behaviour."""
 
+import io
+import threading
 import unittest
+from contextlib import contextmanager, suppress
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Callable, Dict, Iterator, List, NamedTuple, Optional
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -8,8 +13,7 @@ from authlib.common.errors import AuthlibBaseError
 
 from kognic.auth.credentials_parser import ApiCredentials
 from kognic.auth.requests.auth_session import _FixedSession
-from kognic.auth.requests.base_client import make_token_provider
-from kognic.auth.requests.bearer_auth import KognicBearerAuth
+from kognic.auth.requests.base_client import create_session, make_token_provider
 
 
 def _creds_with_scopes(scopes):
@@ -56,90 +60,222 @@ def _make_fixed_session():
     )
 
 
-class TestKognicBearerAuthCall(unittest.TestCase):
-    def test_injects_bearer_token(self):
-        provider = MagicMock()
-        provider.ensure_token.return_value = {"access_token": "tok-abc"}
+class _TokenProvider:
+    """Hands out a new token after each invalidation, and counts the invalidations."""
 
-        auth = KognicBearerAuth(provider)
-        prepared = MagicMock()
-        prepared.headers = {}
+    def __init__(self):
+        self.issued = 0
+        self.invalidations = 0
+        self._token = None
 
-        result = auth(prepared)
+    def ensure_token(self) -> dict:
+        if self._token is None:
+            self.issued += 1
+            self._token = {"access_token": f"token-{self.issued}"}
+        return self._token
 
-        self.assertEqual(prepared.headers["Authorization"], "Bearer tok-abc")
-        prepared.register_hook.assert_called_once_with("response", auth._handle_401)
-        self.assertIs(result, prepared)
+    def invalidate_token(self) -> None:
+        self.invalidations += 1
+        self._token = None
+
+
+class _Received(NamedTuple):
+    path: str
+    authorization: Optional[str]
+    body: bytes
+
+
+class _RecordingHandler(BaseHTTPRequestHandler):
+    """Records the Authorization header and body of each request, then answers each path with
+    the next reply from its route, repeating the last one."""
+
+    protocol_version = "HTTP/1.1"
+    # Ends a read that waits for body bytes the client announced but never sends.
+    timeout = 1
+    routes: Dict[str, List[Callable[["_RecordingHandler"], None]]]
+    received: List[_Received]
+
+    def _read_body(self) -> bytes:
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            body = b""
+            while True:
+                size = int(self.rfile.readline().split(b";")[0], 16)
+                if size == 0:
+                    while self.rfile.readline() not in (b"\r\n", b""):
+                        pass
+                    return body
+                body += self.rfile.read(size)
+                self.rfile.readline()
+        return self.rfile.read(int(self.headers.get("Content-Length", 0)))
+
+    def _respond(self):
+        hits = sum(1 for r in self.received if r.path == self.path)
+        self.received.append(_Received(self.path, self.headers.get("Authorization"), self._read_body()))
+        replies = self.routes[self.path]
+        replies[min(hits, len(replies) - 1)](self)
+
+    do_GET = _respond
+    do_POST = _respond
+    do_PUT = _respond
+
+    def log_message(self, format, *args):  # noqa: A002
+        """Silence per-request stderr logging so test output stays pristine."""
+
+
+def _status(status: int) -> Callable[[_RecordingHandler], None]:
+    def reply(handler: _RecordingHandler):
+        body = b'{"message": "reply"}'
+        handler.send_response(status)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+
+    return reply
+
+
+def _redirect(location: str) -> Callable[[_RecordingHandler], None]:
+    def reply(handler: _RecordingHandler):
+        handler.send_response(307)
+        handler.send_header("Location", location)
+        handler.send_header("Content-Length", "0")
+        handler.end_headers()
+
+    return reply
+
+
+def _after(release: threading.Event, reply: Callable[[_RecordingHandler], None]) -> Callable[[_RecordingHandler], None]:
+    """Hold ``reply`` back until ``release`` is set, for at most 2s."""
+
+    def delayed(handler: _RecordingHandler):
+        release.wait(2)
+        # The client may have given up and closed the connection by now.
+        with suppress(OSError):
+            reply(handler)
+
+    return delayed
+
+
+@contextmanager
+def _server(routes: Dict[str, List[Callable[[_RecordingHandler], None]]]) -> Iterator[tuple[str, List[_Received]]]:
+    """Serve ``routes`` on a local server, yielding its base URL and the requests it received."""
+    received: List[_Received] = []
+    handler: Callable = type("_Handler", (_RecordingHandler,), {"routes": routes, "received": received})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", received
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+UPLOAD = b"0123456789" * 100
+
+
+def _session(provider: _TokenProvider) -> requests.Session:
+    """Return a session that ignores ~/.netrc and proxy env vars, which requests applies on redirects."""
+    session = create_session(token_provider=provider)
+    session.trust_env = False
+    return session
 
 
 class TestKognicBearerAuthHandle401(unittest.TestCase):
-    def _make_auth(self, new_token="fresh-token"):
-        provider = MagicMock()
-        provider.ensure_token.return_value = {"access_token": new_token}
-        return KognicBearerAuth(provider), provider
+    """A 401 is answered with a fresh token and one re-send, but only for a request that still
+    carries its Bearer header, and only with a replayable body."""
 
-    def _make_401_response(self):
-        # Don't use spec=requests.Response; `connection` is an internal attribute
-        # not listed in the public API so spec would block it.
-        resp = MagicMock()
-        resp.status_code = 401
-        resp.content = b""
-        copied_prep = MagicMock()
-        copied_prep.headers = {}  # real dict so __setitem__ is observable
-        resp.request.copy.return_value = copied_prep
-        retry_resp = MagicMock()
-        retry_resp.history = []
-        resp.connection.send.return_value = retry_resp
-        return resp, retry_resp
+    def test_401_from_another_origin_after_a_redirect_is_raised_without_sending_the_token(self):
+        provider = _TokenProvider()
+        routes = {"/target": [_status(401)]}
+        with _server(routes) as (base, received):
+            # Same port and scheme, so only the hostname differs.
+            routes["/start"] = [_redirect(f"{base.replace('127.0.0.1', 'localhost')}/target")]
+            with self.assertRaises(requests.HTTPError) as error:
+                _session(provider).get(f"{base}/start", timeout=1)
 
-    def test_non_401_passes_through(self):
-        auth, provider = self._make_auth()
-        resp = MagicMock(spec=requests.Response)
-        resp.status_code = 200
+        self.assertEqual(error.exception.response.status_code, 401)
+        self.assertEqual(
+            [(r.path, r.authorization) for r in received],
+            [("/start", "Bearer token-1"), ("/target", None)],
+        )
+        self.assertEqual(provider.invalidations, 0)
+        self.assertEqual(provider.issued, 1)
 
-        result = auth._handle_401(resp)
+    def test_401_from_the_called_host_is_answered_with_a_fresh_token(self):
+        provider = _TokenProvider()
+        with _server({"/resource": [_status(401), _status(200)]}) as (base, received):
+            resp = _session(provider).get(f"{base}/resource", timeout=1)
 
-        self.assertIs(result, resp)
-        provider.invalidate_token.assert_not_called()
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual([r.status_code for r in resp.history], [401])
+        self.assertEqual([r.authorization for r in received], ["Bearer token-1", "Bearer token-2"])
+        self.assertEqual(provider.invalidations, 1)
 
-    def test_401_invalidates_token(self):
-        auth, provider = self._make_auth()
-        resp, _ = self._make_401_response()
+    def test_401_on_the_resend_is_raised_without_another_resend(self):
+        provider = _TokenProvider()
+        with _server({"/resource": [_status(401)]}) as (base, received):
+            with self.assertRaises(requests.HTTPError) as error:
+                _session(provider).get(f"{base}/resource", timeout=1)
 
-        auth._handle_401(resp)
+        self.assertEqual(error.exception.response.status_code, 401)
+        self.assertEqual([r.authorization for r in received], ["Bearer token-1", "Bearer token-2"])
+        self.assertEqual(provider.invalidations, 1)
 
-        provider.invalidate_token.assert_called_once()
+    def test_resend_uses_the_request_options_of_the_call(self):
+        provider = _TokenProvider()
+        release = threading.Event()
+        with _server({"/resource": [_status(401), _after(release, _status(200))]}) as (base, received):
+            try:
+                # POST, so neither the urllib3 retry nor the cut-off retry replays the timed-out send.
+                with self.assertRaises(requests.exceptions.Timeout):
+                    _session(provider).post(f"{base}/resource", timeout=0.3)
+            finally:
+                release.set()
 
-    def test_401_retries_with_new_token(self):
-        auth, provider = self._make_auth("brand-new-token")
-        resp, retry_resp = self._make_401_response()
+        self.assertEqual([r.authorization for r in received], ["Bearer token-1", "Bearer token-2"])
 
-        result = auth._handle_401(resp)
+    def test_401_after_a_redirect_on_the_same_host_is_answered_with_a_fresh_token(self):
+        provider = _TokenProvider()
+        routes = {"/start": [_redirect("/target")], "/target": [_status(401), _status(200)]}
+        with _server(routes) as (base, received):
+            resp = _session(provider).get(f"{base}/start", timeout=1)
 
-        # ensure_token called twice: once in __call__ (not here), once in _handle_401
-        provider.ensure_token.assert_called_once()
-        copied = resp.request.copy.return_value
-        self.assertEqual(copied.headers["Authorization"], "Bearer brand-new-token")
-        resp.connection.send.assert_called_once_with(copied)
-        self.assertIs(result, retry_resp)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            [(r.path, r.authorization) for r in received],
+            [("/start", "Bearer token-1"), ("/target", "Bearer token-1"), ("/target", "Bearer token-2")],
+        )
 
-    def test_401_original_response_appended_to_history(self):
-        auth, _ = self._make_auth()
-        resp, retry_resp = self._make_401_response()
+    def test_stream_body_is_sent_in_full_when_resent(self):
+        provider = _TokenProvider()
+        with _server({"/resource": [_status(401), _status(200)]}) as (base, received):
+            session = _session(provider)
+            resp = session.put(f"{base}/resource", data=io.BytesIO(UPLOAD), timeout=1)
 
-        auth._handle_401(resp)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual([r.body for r in received], [UPLOAD, UPLOAD])
 
-        self.assertIn(resp, retry_resp.history)
+    def test_generator_body_is_not_resent_and_the_next_call_gets_a_fresh_token(self):
+        def chunks():
+            yield UPLOAD[:500]
+            yield UPLOAD[500:]
 
-    def test_401_passes_kwargs_to_send(self):
-        auth, _ = self._make_auth()
-        resp, retry_resp = self._make_401_response()
+        provider = _TokenProvider()
+        routes = {"/resource": [_status(401), _status(200)], "/next": [_status(200)]}
+        with _server(routes) as (base, received):
+            session = _session(provider)
+            with self.assertRaises(requests.HTTPError) as error:
+                session.put(f"{base}/resource", data=chunks(), timeout=1)
+            session.get(f"{base}/next", timeout=1)
 
-        auth._handle_401(resp, timeout=5, verify=False)
-
-        _, kwargs = resp.connection.send.call_args
-        self.assertEqual(kwargs.get("timeout"), 5)
-        self.assertFalse(kwargs.get("verify"))
+        self.assertEqual(error.exception.response.status_code, 401)
+        self.assertEqual(
+            [(r.path, r.authorization, r.body) for r in received],
+            [("/resource", "Bearer token-1", UPLOAD), ("/next", "Bearer token-2", b"")],
+        )
+        self.assertEqual(provider.invalidations, 1)
 
 
 class TestFixedSessionRefreshToken(unittest.TestCase):

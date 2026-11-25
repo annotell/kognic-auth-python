@@ -325,6 +325,14 @@ responses and cut-off responses alternate, one call to one URL can make up to 16
 about 15.5s of backoff (more if the server sends `Retry-After`) on top of each attempt's own
 timeout.
 
+On a 401, the **sync client** invalidates its cached token and sends the request once more with a
+fresh token. Two cases raise the 401 instead:
+
+- A redirect went to a different origin (scheme, host or port). requests removes the token on such
+  a redirect, and the client does not add it back. Call the target URL directly instead.
+- The body is not replayable, such as a generator. The token is still invalidated, so your next
+  call gets a fresh one.
+
 ### Sync Client (requests)
 
 ```python
