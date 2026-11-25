@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Mapping
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
 
 from kognic.auth.credentials_parser import ANY_AUTH_TYPE
@@ -18,9 +20,9 @@ from kognic.auth import (
     DEFAULT_HOST,
     DEFAULT_TOKEN_ENDPOINT_RELPATH,
     MAX_RETRIES,
-    RETRY_BACKOFF_FACTOR,
     RETRY_STATUS_CODES,
     RETRYABLE_METHODS,
+    retry_delay,
 )
 from kognic.auth._sunset import SunsetHandler, default_sunset_handler, handle_sunset
 from kognic.auth._user_agent import get_user_agent
@@ -33,15 +35,22 @@ logger = logging.getLogger(__name__)
 _DEFAULT_SUNSET_HANDLER: SunsetHandler = default_sunset_handler()
 
 
-def _retry_delay(retry_number: int) -> float:
-    """Seconds to wait before the given 1-based retry.
+# The request wrappers with a call in progress in the current task.
+_calls_in_progress: ContextVar[frozenset] = ContextVar("kognic_auth_calls_in_progress", default=frozenset())
 
-    Mirrors the exponential backoff urllib3 applies for the sync client, so both clients
-    space their retries identically: the first retry is immediate, then 1s, then 2s.
+
+def _has_replayable_body(kwargs: dict) -> bool:
+    """Whether the body of a request can be sent again in full. JSON always can.
+
+    httpx sends a ``data`` value that is not a mapping as raw content, so it counts as a body.
     """
-    if retry_number <= 1:
-        return 0.0
-    return RETRY_BACKOFF_FACTOR * (2 ** (retry_number - 1))
+    content = kwargs.get("content")
+    data = kwargs.get("data")
+    return (
+        (content is None or isinstance(content, (bytes, str)))
+        and (data is None or isinstance(data, Mapping))
+        and not kwargs.get("files")
+    )
 
 
 def _handle_http_error(resp: httpx.Response):
@@ -68,6 +77,15 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
     - Automatic JSON serialization
     - Retry logic for transient errors (502, 503, 504) on idempotent methods only; POST and
       PATCH surface the first failure so the caller decides whether repeating is safe
+    - Cut-off retry: a response whose connection closes or resets before the body is complete
+      (``httpx.RemoteProtocolError`` or ``httpx.ReadError``) is retried for idempotent methods
+      and the token request. Only the outermost request call retries it, so a token refresh
+      inside an API call is replayed as part of the whole request. Read timeouts are not retried.
+    - One budget: status retries and cut-off retries share a count, for at most 4 attempts per
+      call, waiting 0s, 1s and 2s between them. The last error or response reaches the caller.
+    - Only a replayable body is sent again: ``json``, ``content`` that is bytes or str, ``data``
+      that is a mapping, and no ``files``. With any other body there is no retry of any kind.
+      Requests made with ``stream()`` are not retried.
     - Sunset header handling
     - Enhanced error messages
 
@@ -138,19 +156,32 @@ class BaseAsyncApiClient(HttpxAuthAsyncClient):
                 kwargs["json"] = json_serializer(json)
 
             method_is_retryable = method.upper() in RETRYABLE_METHODS or str(url) == token_url
+            retries = MAX_RETRIES if method_is_retryable and _has_replayable_body(kwargs) else 0
 
-            async def call_with_simple_retry(attempts):
-                resp = await client_request(method, url, **kwargs)
-                if attempts == 0 or not method_is_retryable:
-                    return resp
-                if resp.status_code in RETRY_STATUS_CODES:
-                    delay = _retry_delay(MAX_RETRIES - attempts + 1)
-                    logger.warning(f"Server {resp.status_code} error for request to url={url}\nRetrying in {delay}s...")
+            # A token refresh inside an API call comes back through this wrapper. Only the
+            # outermost call retries a cut-off response, replaying the whole request.
+            active = _calls_in_progress.get()
+            outermost = request not in active
+            outer_calls = _calls_in_progress.set(active | {request})
+            try:
+                for retry_number in range(1, retries + 1):
+                    try:
+                        resp = await client_request(method, url, **kwargs)
+                    except (httpx.RemoteProtocolError, httpx.ReadError) as e:
+                        if not outermost:
+                            raise
+                        reason = f"Cut-off response ({e})"
+                    else:
+                        if resp.status_code not in RETRY_STATUS_CODES:
+                            break
+                        reason = f"Server {resp.status_code} error"
+                    delay = retry_delay(retry_number)
+                    logger.warning(f"{reason} for request to url={url}\nRetrying in {delay}s...")
                     await asyncio.sleep(delay)
-                    return await call_with_simple_retry(attempts - 1)
-                return resp
-
-            resp = await call_with_simple_retry(MAX_RETRIES)
+                else:
+                    resp = await client_request(method, url, **kwargs)
+            finally:
+                _calls_in_progress.reset(outer_calls)
 
             handle_sunset(resp, sunset_handler)
             _handle_http_error(resp)

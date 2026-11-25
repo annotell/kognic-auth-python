@@ -29,6 +29,18 @@ RETRY_STATUS_CODES = (502, 503, 504)
 # Attempts made after the initial request, for a total of four calls.
 MAX_RETRIES = 3
 
+
+def retry_delay(retry_number: int) -> float:
+    """Seconds to wait before the given 1-based retry: 0s, then 1s, then 2s.
+
+    This is the schedule urllib3 applies to the sync client's status retries, so every retry of
+    both clients is spaced the same way.
+    """
+    if retry_number <= 1:
+        return 0.0
+    return RETRY_BACKOFF_FACTOR * (2 ** (retry_number - 1))
+
+
 DEFAULT_ENV_CONFIG_FILE_PATH = (
     Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "kognic" / "environments.json"
 )

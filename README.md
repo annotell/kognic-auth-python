@@ -304,10 +304,15 @@ These provide a `requests`/`httpx`-compatible interface with enhancements:
 Both clients retry 502, 503 and 504 responses for `HEAD`, `GET`, `PUT`, `DELETE`, `OPTIONS`
 and `TRACE`, for up to 4 attempts per call.
 
-The sync client also has a **cut-off retry**. A cut-off response is one whose connection closes
-after the headers arrived and before the body was complete (`requests.exceptions.ChunkedEncodingError`).
-For the same methods, the sync client retries it for up to 4 attempts, waiting 0.5s, 1s and 2s
-between them:
+Both clients also have a **cut-off retry**. A cut-off response is one whose connection closes or
+resets after the headers arrived and before the body was complete. For the same methods, each
+client retries it for up to 4 attempts. Every retry in both clients waits 0s, 1s and 2s before
+the second, third and fourth attempt. Read timeouts are not retried.
+
+A `PUT` or `DELETE` that is retried may already have taken effect. A retried `DELETE` that gets a
+404 raises the 404; handle it if your first attempt may have deleted the resource.
+
+In the **sync client** (`requests.exceptions.ChunkedEncodingError`):
 
 - The whole request is replayed from the original URL, so a redirect is followed again and a
   signed URL is fetched fresh on each attempt. The method you called decides whether it is
@@ -317,13 +322,24 @@ between them:
   is raised.
 - With `stream=True` the body is read after the call returns, so a cut-off response is not
   retried. The error is raised when you read the body.
-- A `PUT` or `DELETE` that is retried may already have taken effect. A retried `DELETE` that
-  gets a 404 raises the 404; handle it if your first attempt may have deleted the resource.
+- **Worst case:** the cut-off retry and the 5xx retry count their attempts separately. When 5xx
+  responses and cut-off responses alternate, one call to one URL can make up to 16 attempts, with
+  about 15s of backoff (more if the server sends `Retry-After`) on top of each attempt's own
+  timeout.
 
-**Worst case:** the cut-off retry and the 5xx retry count their attempts separately. When 5xx
-responses and cut-off responses alternate, one call to one URL can make up to 16 attempts, with
-about 15.5s of backoff (more if the server sends `Retry-After`) on top of each attempt's own
-timeout.
+In the **async client** (`httpx.RemoteProtocolError` or `httpx.ReadError`):
+
+- The cut-off retry and the 5xx retry share one count, so your request is attempted at most 4
+  times per call. Once attempts run out, the last error is raised unchanged.
+- Only a replayable body is sent again: `json`, `content` that is `bytes` or `str`, `data` that is
+  a mapping, and no `files`. With any other body, such as an async generator, there is no retry
+  of any kind: a cut-off response raises the original error and a 5xx response is raised after 1
+  attempt.
+- The token request is retried too. When a token expires during a call and its token response is
+  cut off, only your call retries: it is replayed whole, token refresh included, so a cut-off
+  token response is retried within the same 4 attempts instead of at two levels.
+- A server that closes the connection without answering is retried as well, as in the sync client.
+- Requests made with `session.stream()` are not retried.
 
 On a 401, the **sync client** invalidates its cached token and sends the request once more with a
 fresh token. Two cases raise the 401 instead:

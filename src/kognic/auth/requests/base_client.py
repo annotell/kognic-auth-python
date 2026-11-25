@@ -24,6 +24,7 @@ from kognic.auth import (
     RETRY_BACKOFF_FACTOR,
     RETRY_STATUS_CODES,
     RETRYABLE_METHODS,
+    retry_delay,
 )
 from kognic.auth._sunset import SunsetHandler, default_sunset_handler, handle_sunset
 from kognic.auth._user_agent import get_user_agent
@@ -121,7 +122,7 @@ def _monkey_patch_send(
                 if not rewind_for_replay(req):
                     raise
                 logger.warning("Cut-off response in call to %s %s, retrying: %s", req.method, req.url, e)
-                time.sleep(RETRY_BACKOFF_FACTOR * 2**attempt)
+                time.sleep(retry_delay(attempt + 1))
         return vanilla_send(req, *args, **kwargs)
 
     def send_request(req, *args, **kwargs):
