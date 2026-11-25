@@ -17,9 +17,8 @@ class KognicBearerAuth(AuthBase):
     """Injects a Bearer token from a RequestsAuthSession into each request.
 
     Handles a 401 response by invalidating the cached token and sending the request once more
-    with a fresh token. That only happens when the request still carries its Bearer header,
-    which requests removes when a redirect leaves the original host, and when its body is
-    replayable. Otherwise the 401 is returned as it is.
+    with a fresh token. That only happens when the request still carries its Bearer header.
+    Otherwise the 401 is returned as it is.
     """
 
     def __init__(self, provider: RequestsAuthSession) -> None:
